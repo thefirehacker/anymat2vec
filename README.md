@@ -1,9 +1,5 @@
 # anymat2vec
-Network for generating word2vec embeddings for any chemical composition, regardless of whether it is in the corpus. 
-
-Also, models for predicting materials properties from these generated embeddings.
-
-
+Network for generating word2vec embeddings for any material composition, regardless of whether it is in the training corpus. Also, models for predicting materials properties from these generated embeddings. Based on the ideas in https://github.com/materialsintelligence/mat2vec
 
 
 

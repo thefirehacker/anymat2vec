@@ -1,7 +1,7 @@
 # anymat2vec
-Network for generating word2vec embeddings for any material, regardless of whether it is in the corpus. Also, models for predicting materials properties from these generated embeddings.
+Network for generating word2vec embeddings for any material, regardless of whether it is in the corpus. 
 
-
+Also, models for predicting materials properties from these generated embeddings.
 
 
 
@@ -36,4 +36,3 @@ Network for generating word2vec embeddings for any material, regardless of wheth
 
 #### analogy testing
 - some of the analogies words (e.g., 'Db', various common compounds) are not in the corpus(BPE?)
-- need to test plain word2vec on the analogies with the unaltered corpus to get baseline

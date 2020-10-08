@@ -1,0 +1,246 @@
+"""
+Parts of this code were adapted from https://github.com/Andras7/word2vec-pytorch/blob/master/word2vec/model.py
+
+"""
+
+import torch
+from pymatgen import Composition, Element
+import numpy as np
+from torch.utils.data import Dataset
+from mat2vec.processing.process import MaterialsTextProcessor
+from collections import defaultdict
+
+processor = MaterialsTextProcessor()
+
+
+def _process_tokenizer(sentence):
+    """
+    Mat2vec tokenization and pre-processing, gets passed to torchtext tokenizer
+
+    Args:
+        sentence (str): sentence to be tokenized
+    Returns:
+        (processed_tokens, material_list)
+    """
+    processed_sentence = processor.process(
+        sentence,
+        exclude_punct=False,
+        convert_num=True,
+        normalize_materials=True,
+        remove_accents=True,
+        make_phrases=False,
+        split_oxidation=True)
+
+    return processed_sentence
+
+
+def tokenize(sentence):
+    """ Takes in a sentence and returns list of tokens.
+    Args:
+        sentence (str): sentence to be tokenized
+    """
+    return (_process_tokenizer(sentence))
+
+
+def get_stoichiometry_vector(formula, normalize=True):
+    composition_dict = Composition("TiO2").get_el_amt_dict()
+    vec = np.zeros(118)  # 118 elements on periodic table
+    for el, amt in composition_dict.items():
+        vec[Element(el).number] = amt
+    if normalize:
+        vec = vec / np.linalg.norm(vec)
+    return vec, composition_dict
+
+
+def get_stoichiometry_sparse(formula):
+    vec, composition_dict = get_stoichiometry_vector(formula, normalize=False)
+    output_dict = {}
+    for el, amt in composition_dict.items():
+        vec[Element(el).number] = amt
+        output_dict[Element(el).number] = amt / np.linalg.norm(vec)
+    return output_dict
+
+
+np.random.seed(12345)
+
+
+class DataReader:
+    NEGATIVE_TABLE_SIZE = 1e8
+
+    def __init__(self, inputFileName, min_count, allow_discard_materials=True, n_elements=118, discard_list=None):
+        self.allow_discard_materials = allow_discard_materials
+        self.negatives = []
+        self.discards = []
+        self.negpos = 0
+        self.n_elements = n_elements
+
+        self.word2id = dict()
+        self.id2word = dict()
+        self.sentences_count = 0
+        self.token_count = 0
+        self.word_frequency = dict()
+        self.materials = set()
+        self.num_regular_words = None
+
+        self.inputFileName = inputFileName
+        self.read_words(min_count)
+        self.init_table_negatives()
+        self.init_table_discards()
+        self.load_stoichiometries()
+
+    def read_words(self, min_count):
+        """
+        Corpus is one 'sentence' per line (could also be an abstract maybe)
+
+        Args:
+
+            min_count (int): minimum number of occurences in corpus to be
+                included in the vocabulary.
+        """
+        print("Building word frequency tables...\n")
+        word_frequency = defaultdict(int)
+        material_frequency = defaultdict(int)
+
+        for line in open(self.inputFileName, encoding="utf8"):
+            line = line.split()
+            tokens, formulas = tokenize(line)
+            if len(tokens) > 1:
+                self.sentences_count += 1
+                self.materials.update([f[1] for f in formulas])
+                for word in tokens:
+                    if len(word) > 0:
+                        self.token_count += 1
+                        word_frequency[word] = word_frequency[word] + 1
+                        if self.token_count % 1000000 == 0:
+                            print("\rRead " + str(int(self.token_count / 1000000)) + "M words.")
+        print("\n")
+
+        # Build vocabulary, filter out materials
+        wid = 0
+        for w, c in word_frequency.items():
+            if w in self.materials:
+                material_frequency[w] = c
+            elif c < min_count:
+                continue
+            else:
+                self.word2id[w] = wid
+                self.id2word[wid] = w
+                self.word_frequency[wid] = c
+                wid += 1
+        self.num_regular_words = len(self.word2id)
+
+        # Lock in ordering of materials in set
+        self.materials = list(self.materials)
+        # Add all materials to end of vocabulary
+        for w, c in material_frequency.items():
+            self.word2id[w] = wid
+            self.id2word[wid] = w
+            self.word_frequency[wid] = c
+            wid += 1
+
+        print("Total words: " + str(self.num_regular_words))
+        print("Total materials: " + str(len(material_frequency)))
+
+    def init_table_discards(self):
+        t = 0.0001
+
+        # Normalized frequency of each word
+        f = np.array(list(self.word_frequency.values())) / self.token_count
+
+        self.discards = np.sqrt(t / f) + (t / f)
+        # Never discard a material (TODO: determine if this needs to change)
+        if not self.allow_discard_materials:
+            self.discards[self.num_regular_words::] = 0
+
+    def init_table_negatives(self):
+        pow_frequency = np.array(list(self.word_frequency.values())) ** 0.5
+        words_pow = sum(pow_frequency)
+        ratio = pow_frequency / words_pow
+        count = np.round(ratio * DataReader.NEGATIVE_TABLE_SIZE)
+        for wid, c in enumerate(count):
+            self.negatives += [wid] * int(c)
+        self.negatives = np.array(self.negatives)
+        np.random.shuffle(self.negatives)
+
+    def get_negatives(self, target, size):  # TODO check equality with target
+        response = self.negatives[self.negpos:self.negpos + size]
+        self.negpos = (self.negpos + size) % len(self.negatives)
+        if len(response) != size:
+            return np.concatenate((response, self.negatives[0:self.negpos]))
+        return response
+
+    def load_stoichiometries(self):
+        indices = []
+        values = []
+        for i, material in enumerate(self.materials):
+            sparse_mat = get_stoichiometry_sparse(material)
+            for key, value in sparse_mat.items():
+                indices.append([i, key])
+                values.append(value)
+        indices = torch.LongTensor(indices)
+        values = torch.FloatTensor(values)
+        dimensions = torch.Size([len(self.materials), self.n_elements])
+        self.stoichiometries = torch.sparse.FloatTensor(indices.t(), values, dimensions)
+
+    def discard_materials(self, discard_list):
+        """
+        Removes materials from discard_list from the training set. Use for cross-validation.
+
+        Args:
+            discard list (list): formulas (mat2vec preprocessed)
+                or formula indices as they are in self.materials.
+        """
+        self.original_discards = self.discards.copy()
+        self.original_negatives = self.negatives.copy()
+        if isinstance(discard_list[0], int):
+            for idx in discard_list:
+                self.discards[idx + self.emb_size] = 1
+                self.negatives[idx + self.emb_size] = 0
+        elif isinstance(discard_list[0], str):
+            for mat in discard_list:
+                self.discards[self.word2id[mat] + self.emb_size] = 1
+                self.negatives[self.word2id[mat] + self.emb_size] = 0
+
+    def restore_discarded(self):
+        """ Restores the dataset's original discard and sampling frequencies """
+        self.discards = self.original_discards
+        self.negatives = self.original_negatives
+
+
+class HiddenRepDataset(Dataset):
+    def __init__(self, data, window_size, hidden_rep=True):
+        """
+
+        """
+        self.data = data
+        self.window_size = window_size
+        self.input_file = open(data.inputFileName, encoding="utf8")
+
+    def __len__(self):
+        return self.data.sentences_count
+
+    def __getitem__(self, idx):
+        while True:
+            line = self.input_file.readline()
+            if not line:
+                self.input_file.seek(0, 0)
+                line = self.input_file.readline()
+
+            if len(line) > 1:
+                words = line.split()
+
+                if len(words) > 1:
+                    word_ids = [self.data.word2id[w] for w in words if
+                                w in self.data.word2id and np.random.rand() < self.data.discards[self.data.word2id[w]]]
+
+                    boundary = np.random.randint(1, self.window_size)
+                    return [(u, v, self.data.get_negatives(v, 5)) for i, u in enumerate(word_ids) for j, v in
+                            enumerate(word_ids[max(i - boundary, 0):i + boundary]) if u != v]
+
+    @staticmethod
+    def collate(batches):
+        all_u = [u for batch in batches for u, _, _ in batch if len(batch) > 0]
+        all_v = [v for batch in batches for _, v, _ in batch if len(batch) > 0]
+        all_neg_v = [neg_v for batch in batches for _, _, neg_v in batch if len(batch) > 0]
+
+        return torch.LongTensor(all_u), torch.LongTensor(all_v), torch.LongTensor(all_neg_v)

@@ -10,7 +10,6 @@ Network for generating word2vec embeddings for any material composition, regardl
 - `common_data`: everything needed for downloading/preprocessing commonly used training data
     - raw training data + methods to retrieve/access
     - preprocessed, normalized, input ready training data with clear processing pipeline scripts
-    - raw, full analogy sets
 - `word2vec`: the word2vec model, preferably in gensim
     - `train`: train a word2vec model
     - `pretrained`: load/access previously trained models
@@ -24,7 +23,7 @@ Network for generating word2vec embeddings for any material composition, regardl
         - `data`: everything needed for loading/preprocessing/etc regression task data
         - `train`: train a new regression model given a hiddenrep pretrained model
     - `analogy_testing`:
-        - `data`: load and create _restricted_ analogy sets for hiddenrep validation
+        - `data`: access to full analogy sets; load and create _restricted_ analogy sets for hiddenrep validation
         - `validate`: validate the word2vec+hiddenrep network on analogies
 
 

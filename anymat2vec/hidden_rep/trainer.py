@@ -43,7 +43,7 @@ class HiddenRepTrainer:
 
     def train(self):
         # Send stoichiometry tensor to GPU
-        self.stoichiometries.to(self.device)
+        self.stoichiometries = self.stoichiometries.to(self.device)
         for epoch in range(self.epochs):
             print("\n\n\nEpoch: " + str(epoch + 1))
             optimizer = optim.Adam(self.hidden_rep_model.parameters(), lr=self.initial_lr)
@@ -73,5 +73,5 @@ class HiddenRepTrainer:
 
 
 if __name__ == '__main__':
-    hr = HiddenRepTrainer(input_file='anymat2vec/relevant_abstracts.txt')
+    hr = HiddenRepTrainer(input_file='anymat2vec/small_corpus.txt')
     hr.train()

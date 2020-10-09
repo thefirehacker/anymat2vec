@@ -16,8 +16,7 @@ class HiddenRepTrainer:
 
     # MIN_COUNT SET BACK TO 12, BATCH_SIZE BACK TO 32
     def __init__(self, input_file, save_directory_name="hr_save", emb_dimension=100, hidden_size=20, batch_size=1,
-                 window_size=5,
-                 epochs=3, initial_lr=0.001, min_count=2):
+                 window_size=5, n_epochs=3, initial_lr=0.001, min_count=2):
 
         self.data = DataReader(input_file, min_count)
         dataset = HiddenRepDataset(self.data, window_size)
@@ -27,7 +26,7 @@ class HiddenRepTrainer:
         self.emb_size = self.data.num_regular_words
         self.emb_dimension = emb_dimension
         self.batch_size = batch_size
-        self.epochs = epochs
+        self.n_epochs = n_epochs
         self.initial_lr = initial_lr
         self.hidden_size = hidden_size
         self.stoichiometries = self.data.stoichiometries
@@ -44,7 +43,7 @@ class HiddenRepTrainer:
     def train(self):
         # Send stoichiometry tensor to GPU
         self.stoichiometries = self.stoichiometries.to(self.device)
-        for epoch in range(self.epochs):
+        for epoch in range(self.n_epochs):
             print("\n\n\nEpoch: " + str(epoch + 1))
             optimizer = optim.Adam(self.hidden_rep_model.parameters(), lr=self.initial_lr)
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, len(self.dataloader))

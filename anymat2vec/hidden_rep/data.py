@@ -46,7 +46,7 @@ def get_stoichiometry_vector(formula, normalize=True):
     composition_dict = Composition("TiO2").get_el_amt_dict()
     vec = np.zeros(118)  # 118 elements on periodic table
     for el, amt in composition_dict.items():
-        vec[Element(el).number] = amt
+        vec[Element(el).number - 1] = amt
     if normalize:
         vec = vec / np.linalg.norm(vec)
     return vec, composition_dict
@@ -56,8 +56,8 @@ def get_stoichiometry_sparse(formula):
     vec, composition_dict = get_stoichiometry_vector(formula, normalize=False)
     output_dict = {}
     for el, amt in composition_dict.items():
-        vec[Element(el).number] = amt
-        output_dict[Element(el).number] = amt / np.linalg.norm(vec)
+        vec[Element(el).number - 1] = amt
+        output_dict[Element(el).number - 1] = amt / np.linalg.norm(vec)
     return output_dict
 
 

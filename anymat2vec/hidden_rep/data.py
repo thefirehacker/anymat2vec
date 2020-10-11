@@ -10,6 +10,7 @@ import numpy as np
 from torch.utils.data import Dataset
 from mat2vec.processing.process import MaterialsTextProcessor
 from collections import defaultdict
+import os
 
 processor = MaterialsTextProcessor()
 
@@ -218,8 +219,9 @@ class DataReader:
 
     @staticmethod
     def from_save(filepath):
-        return torch.load(filepath)
-
+        data = torch.load(filepath)
+        data.input_file = filepath.replace(".pt", ".txt")
+        return data
 
 class HiddenRepDataset(Dataset):
     def __init__(self, data, window_size):

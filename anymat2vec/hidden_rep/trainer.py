@@ -21,7 +21,14 @@ class HiddenRepTrainer:
     def __init__(self, input_file, save_directory_name="hr_save", emb_dimension=100, hidden_size=20, batch_size=1,
                  window_size=5, n_epochs=3, initial_lr=0.001, min_count=2):
 
-        self.data = DataReader(input_file, min_count)
+        _, file_extension = os.path.splitext(input_file)
+
+        if file_extension == ".pt":
+            print("Loading preprocessed dataset. Please ensure that the original corpus file is also available \n"
+                  "in the same directory and has the same name as the preprocessed input file except a '.txt' extension.")
+            self.data = DataReader.from_save(input_file)
+        else:
+            self.data = DataReader(input_file, min_count)
         dataset = HiddenRepDataset(self.data, window_size)
         self.dataloader = DataLoader(dataset, batch_size=batch_size,
                                      shuffle=False, num_workers=0, collate_fn=dataset.collate)
@@ -75,7 +82,7 @@ class HiddenRepTrainer:
 
 
 if __name__ == '__main__':
-    hrt = HiddenRepTrainer(input_file='anymat2vec/tiny_corpus.txt')
+    hrt = HiddenRepTrainer(input_file='data/relevant_abstracts.pt')
     hrt.train()
     hrt.save_model()
-    hrt.data.save("anymat2vec/tiny_corpus_loaded.pt")
+    # hrt.data.save("data/tiny_corpus_loaded.pt")

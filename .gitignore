@@ -133,3 +133,9 @@ dmypy.json
 
 # Models directory
 */models/*
+
+*/.DS_Store
+
+# Local files directories.
+data/*
+models/*

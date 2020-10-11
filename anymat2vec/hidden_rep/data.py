@@ -67,7 +67,7 @@ np.random.seed(12345)
 class DataReader:
     NEGATIVE_TABLE_SIZE = 1e8
 
-    def __init__(self, inputFileName, min_count, allow_discard_materials=True, n_elements=118, discard_list=None):
+    def __init__(self, inputFileName, min_count, allow_discard_materials=True, n_elements=118):
         self.allow_discard_materials = allow_discard_materials
         self.negatives = []
         self.discards = []

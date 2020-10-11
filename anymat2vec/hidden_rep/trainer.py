@@ -6,8 +6,11 @@ import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+from anymat2vec import MODELS_DIR
 from anymat2vec.hidden_rep.data import DataReader, HiddenRepDataset
 from anymat2vec.hidden_rep.model import HiddenRepModel
+import os
+
 
 class HiddenRepTrainer:
     """
@@ -67,10 +70,11 @@ class HiddenRepTrainer:
                     if i > 0 and i % 500 == 0:
                         print(" Loss: " + str(running_loss))
 
-    def save_model(self):
-        self.hidden_rep_model.save(self.data.id2word)
+    def save_model(self, save_dir=os.path.join(MODELS_DIR, "hr_checkpoints")):
+        self.hidden_rep_model.save(os.path.join(save_dir, "checkpoint.pt"))
 
 
 if __name__ == '__main__':
-    hr = HiddenRepTrainer(input_file='anymat2vec/small_corpus.txt')
-    hr.train()
+    hrt = HiddenRepTrainer(input_file='anymat2vec/tiny_corpus.txt')
+    hrt.train()
+    hrt.save_model()

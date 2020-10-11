@@ -9,6 +9,7 @@ import torch.nn.functional as F
 from torch.nn import init
 import os
 
+
 class HiddenRepModel(nn.Module):
     """
     u_embedding: Embedding for center word.
@@ -47,6 +48,7 @@ class HiddenRepModel(nn.Module):
         self.tmeg = self.make_stoich_to_emb_nn()
         # context material embedding generator
         self.cmeg = self.make_stoich_to_emb_nn()
+
 
     def make_stoich_to_emb_nn(self):
         """ Initializes the neural network for turning a stoichiometry vector
@@ -112,30 +114,16 @@ class HiddenRepModel(nn.Module):
 
         return torch.mean(pos_score + neg_score)
 
-    def save(self, id2word, save_directory_name="hidden_rep_save"):
-        PATH = save_directory_name
-        if not os.path.exists(PATH):
-            os.makedirs(PATH)
-        input_embedding = self.u_embeddings.weight.cpu().data.numpy()
-        p1 = os.path.join(PATH, "input_embeddings.mat")
-        with open(p1, 'w') as f:
-            f.write('%d %d\n' % (len(id2word), self.emb_dimension))
-            for wid, w in id2word.items():
-                try:
-                    e = ' '.join(map(lambda x: str(x), input_embedding[wid]))
-                    f.write('%s %s\n' % (w, e))
-                except IndexError:
-                    pass
-        output_embedding = self.v_embeddings.weight.cpu().data.numpy()
-        p2 = os.path.join(PATH, "output_embeddings.mat")
-        with open(p2, 'w') as f:
-            f.write('%d %d\n' % (len(id2word), self.emb_dimension))
-            for wid, w in id2word.items():
-                try:
-                    e = ' '.join(map(lambda x: str(x), output_embedding[wid]))
-                    f.write('%s %s\n' % (w, e))
-                except IndexError:
-                    pass
+    def save(self, filepath, overwrite=False):
+        if os.path.exists(filepath) and not overwrite:
+            yn = input(f"Save file already exists at {filepath}. Overwrite?\nY/N: ")
+            if yn.lower() != "y":
+                return None
+        else:
+            os.mkdir(os.path.dirname(filepath))
+        torch.save(self, filepath)
 
-        torch.save(self.tmeg.state_dict(), os.path.join(PATH, "target_embeddings_generator.pt"))
-        torch.save(self.cmeg.state_dict(), os.path.join(PATH, "context_embeddings_generator.pt"))
+    @staticmethod
+    def load_from_file(filepath):
+        return torch.load(filepath)
+

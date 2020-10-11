@@ -1,3 +1,5 @@
 # requirements go here
 gensim
 pymatgen
+torch
+tqdm

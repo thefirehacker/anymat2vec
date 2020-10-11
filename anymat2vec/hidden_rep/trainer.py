@@ -78,3 +78,4 @@ if __name__ == '__main__':
     hrt = HiddenRepTrainer(input_file='anymat2vec/tiny_corpus.txt')
     hrt.train()
     hrt.save_model()
+    hrt.data.save("anymat2vec/tiny_corpus_loaded.pt")

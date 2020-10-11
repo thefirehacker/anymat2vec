@@ -106,7 +106,7 @@ class HiddenRepModel(nn.Module):
         pos_score = -F.logsigmoid(pos_score)
 
         # batch matrix-matrix product, calculates the cross products
-        # of the negative sampes with center word
+        # of the negative samples with center word
         neg_score = torch.bmm(emb_neg_v, emb_u.unsqueeze(2)).squeeze()
         neg_score = torch.clamp(neg_score, max=10, min=-10)
         neg_score = -torch.sum(F.logsigmoid(-neg_score), dim=1)

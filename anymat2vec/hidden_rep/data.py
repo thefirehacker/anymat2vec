@@ -65,7 +65,7 @@ def get_stoichiometry_sparse(formula):
 np.random.seed(12345)
 
 
-class DataReader(nn.Module):
+class DataReader:
     NEGATIVE_TABLE_SIZE = 1e8
 
     def __init__(self, corpus_file, min_count, allow_discard_materials=True, n_elements=118):

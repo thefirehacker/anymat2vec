@@ -14,7 +14,7 @@ setup(
     description="General Latent Representations of Materials From Text Mining",
     long_description=readme,
     author="Materials Scholar Development Team",
-    author_email="amalietrewartha@lbl.gov, ardunn@lbl.gov",
+    author_email="jdagdelen@lbl.gov, amalietrewartha@lbl.gov, ardunn@lbl.gov",
     url="https://github.com/materialsintelligence/anymat2vec",
     license=license,
     packages=find_packages(),

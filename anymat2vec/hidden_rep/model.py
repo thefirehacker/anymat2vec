@@ -49,7 +49,6 @@ class HiddenRepModel(nn.Module):
         # context material embedding generator
         self.cmeg = self.make_stoich_to_emb_nn()
 
-
     def make_stoich_to_emb_nn(self):
         """ Initializes the neural network for turning a stoichiometry vector
         into an embedding
@@ -126,4 +125,3 @@ class HiddenRepModel(nn.Module):
     @staticmethod
     def load_from_file(filepath):
         return torch.load(filepath)
-

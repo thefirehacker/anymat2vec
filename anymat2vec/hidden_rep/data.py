@@ -40,7 +40,7 @@ def tokenize(sentence):
     Args:
         sentence (str): sentence to be tokenized
     """
-    return (_process_tokenizer(sentence))
+    return _process_tokenizer(sentence)
 
 
 def get_stoichiometry_vector(formula, normalize=True):

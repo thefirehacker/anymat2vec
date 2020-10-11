@@ -44,7 +44,7 @@ def tokenize(sentence):
 
 
 def get_stoichiometry_vector(formula, normalize=True):
-    composition_dict = Composition("TiO2").get_el_amt_dict()
+    composition_dict = Composition(formula).get_el_amt_dict()
     vec = np.zeros(118)  # 118 elements on periodic table
     for el, amt in composition_dict.items():
         vec[Element(el).number - 1] = amt
@@ -87,6 +87,9 @@ class DataReader:
         self.read_words(min_count)
         self.init_table_negatives()
         self.init_table_discards()
+        self.original_discards = self.discards.copy()
+        self.original_negatives = self.negatives.copy()
+        self.stoichiometries = None
         self.load_stoichiometries()
 
     def read_words(self, min_count):
@@ -198,12 +201,12 @@ class DataReader:
         self.original_negatives = self.negatives.copy()
         if isinstance(discard_list[0], int):
             for idx in discard_list:
-                self.discards[idx + self.emb_size] = 1
-                self.negatives[idx + self.emb_size] = 0
+                self.discards[idx + self.num_regular_words] = 1
+                self.negatives[idx + self.num_regular_words] = 0
         elif isinstance(discard_list[0], str):
             for mat in discard_list:
-                self.discards[self.word2id[mat] + self.emb_size] = 1
-                self.negatives[self.word2id[mat] + self.emb_size] = 0
+                self.discards[self.word2id[mat] + self.num_regular_words] = 1
+                self.negatives[self.word2id[mat] + self.num_regular_words] = 0
 
     def restore_discarded(self):
         """ Restores the dataset's original discard and sampling frequencies """

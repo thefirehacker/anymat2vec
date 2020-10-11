@@ -4,6 +4,7 @@ Parts of this code were adapted from https://github.com/Andras7/word2vec-pytorch
 """
 
 import torch
+import torch.nn as nn
 from pymatgen import Composition, Element
 import numpy as np
 from torch.utils.data import Dataset
@@ -64,10 +65,10 @@ def get_stoichiometry_sparse(formula):
 np.random.seed(12345)
 
 
-class DataReader:
+class DataReader(nn.Module):
     NEGATIVE_TABLE_SIZE = 1e8
 
-    def __init__(self, inputFileName, min_count, allow_discard_materials=True, n_elements=118):
+    def __init__(self, corpus_file, min_count, allow_discard_materials=True, n_elements=118):
         self.allow_discard_materials = allow_discard_materials
         self.negatives = []
         self.discards = []
@@ -82,7 +83,7 @@ class DataReader:
         self.materials = set()
         self.num_regular_words = None
 
-        self.inputFileName = inputFileName
+        self.input_file = corpus_file
         self.read_words(min_count)
         self.init_table_negatives()
         self.init_table_discards()
@@ -98,11 +99,13 @@ class DataReader:
                 included in the vocabulary.
         """
         print("Building word frequency tables...\n")
+        if isinstance(self.materials, list):
+            self.materials = set(self.materials)
+
         word_frequency = defaultdict(int)
         material_frequency = defaultdict(int)
 
-        for line in open(self.inputFileName, encoding="utf8"):
-            line = line.split()
+        for line in open(self.input_file, encoding="utf8"):
             tokens, formulas = tokenize(line)
             if len(tokens) > 1:
                 self.sentences_count += 1
@@ -148,8 +151,9 @@ class DataReader:
         f = np.array(list(self.word_frequency.values())) / self.token_count
 
         self.discards = np.sqrt(t / f) + (t / f)
-        # Never discard a material (TODO: determine if this needs to change)
+
         if not self.allow_discard_materials:
+            # Never discard materials
             self.discards[self.num_regular_words::] = 0
 
     def init_table_negatives(self):
@@ -206,15 +210,19 @@ class DataReader:
         self.discards = self.original_discards
         self.negatives = self.original_negatives
 
+    def save(self, filepath):
+        torch.save(self, filepath)
+
+    @staticmethod
+    def from_save(filepath):
+        return torch.load(filepath)
+
 
 class HiddenRepDataset(Dataset):
-    def __init__(self, data, window_size, hidden_rep=True):
-        """
-
-        """
+    def __init__(self, data, window_size):
         self.data = data
         self.window_size = window_size
-        self.input_file = open(data.inputFileName, encoding="utf8")
+        self.input_file = open(data.input_file, encoding="utf8")
 
     def __len__(self):
         return self.data.sentences_count

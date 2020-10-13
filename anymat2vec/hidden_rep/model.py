@@ -40,10 +40,7 @@ class HiddenRepModel(nn.Module):
         initrange = 1.0 / self.emb_dimension
         init.uniform_(self.u_embeddings.weight.data, -initrange, initrange)
         init.constant_(self.v_embeddings.weight.data, 0)
-
-        # Load stoichiometries into GPU for fast lookup and reuse
         self.stoichiometries = stoichiometries
-
         # target material embedding generator
         self.tmeg = self.make_stoich_to_emb_nn()
         # context material embedding generator

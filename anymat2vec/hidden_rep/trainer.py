@@ -17,9 +17,8 @@ class HiddenRepTrainer:
     Parts adapted from https://github.com/Andras7/word2vec-pytorch/blob/master/word2vec/trainer.py
     """
 
-    # MIN_COUNT SET BACK TO 12, BATCH_SIZE BACK TO 32
     def __init__(self, input_file, save_directory_name="hr_save", emb_dimension=100, hidden_size=20, batch_size=1,
-                 window_size=5, n_epochs=3, initial_lr=0.001, min_count=2):
+                 window_size=5, n_epochs=3, initial_lr=0.001, min_count=10, use_vanilla_word2vec=False):
 
         _, file_extension = os.path.splitext(input_file)
 
@@ -29,11 +28,15 @@ class HiddenRepTrainer:
             self.data = DataReader.from_save(input_file)
         else:
             self.data = DataReader(input_file, min_count)
+            self.data.save(input_file.replace(".txt", ".pt"))
         dataset = HiddenRepDataset(self.data, window_size)
         self.dataloader = DataLoader(dataset, batch_size=batch_size,
                                      shuffle=False, num_workers=0, collate_fn=dataset.collate)
         self.save_directory_name = save_directory_name
-        self.emb_size = self.data.num_regular_words
+        if use_vanilla_word2vec:
+            self.emb_size = len(self.data.word2id)
+        else:
+            self.emb_size = self.data.num_regular_words
         self.emb_dimension = emb_dimension
         self.batch_size = batch_size
         self.n_epochs = n_epochs
@@ -82,7 +85,7 @@ class HiddenRepTrainer:
 
 
 if __name__ == '__main__':
-    hrt = HiddenRepTrainer(input_file='data/relevant_abstracts.pt')
+    hrt = HiddenRepTrainer(input_file='data/small_corpus.pt', use_vanilla_word2vec=False)
     hrt.train()
     hrt.save_model()
     # hrt.data.save("data/tiny_corpus_loaded.pt")

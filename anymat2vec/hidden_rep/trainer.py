@@ -17,7 +17,7 @@ class HiddenRepTrainer:
     Parts adapted from https://github.com/Andras7/word2vec-pytorch/blob/master/word2vec/trainer.py
     """
 
-    def __init__(self, input_file, save_directory_name="hr_save", emb_dimension=100, hidden_size=20, batch_size=1,
+    def __init__(self, input_file, save_directory_name="hr_save", emb_dimension=100, hidden_size=20, batch_size=32,
                  window_size=5, n_epochs=3, initial_lr=0.001, min_count=10, use_vanilla_word2vec=False):
 
         _, file_extension = os.path.splitext(input_file)
@@ -33,20 +33,26 @@ class HiddenRepTrainer:
         self.dataloader = DataLoader(dataset, batch_size=batch_size,
                                      shuffle=False, num_workers=0, collate_fn=dataset.collate)
         self.save_directory_name = save_directory_name
+        self.emb_size = len(self.data.word2id)
         if use_vanilla_word2vec:
-            self.emb_size = len(self.data.word2id)
+            self.num_regular_words = self.emb_size
         else:
-            self.emb_size = self.data.num_regular_words
+            self.num_regular_words = self.data.num_regular_words
+
         self.emb_dimension = emb_dimension
         self.batch_size = batch_size
         self.n_epochs = n_epochs
         self.initial_lr = initial_lr
         self.hidden_size = hidden_size
-        self.stoichiometries = self.data.stoichiometries
+        self.stoichiometries = torch.cat((torch.zeros((self.data.num_regular_words,
+                                                         self.data.stoichiometries.size()[1]),
+                                                        dtype=self.data.stoichiometries.dtype),
+                                            self.data.stoichiometries.to_dense()))
         self.hidden_rep_model = HiddenRepModel(self.emb_size,
                                                self.emb_dimension,
                                                self.hidden_size,
-                                               self.stoichiometries)
+                                               self.stoichiometries,
+                                               self.num_regular_words)
 
         self.use_cuda = torch.cuda.is_available()
         self.device = torch.device("cuda" if self.use_cuda else "cpu")
@@ -85,7 +91,7 @@ class HiddenRepTrainer:
 
 
 if __name__ == '__main__':
-    hrt = HiddenRepTrainer(input_file='data/small_corpus.pt', use_vanilla_word2vec=False)
+    hrt = HiddenRepTrainer(input_file='data/relevant_abstracts.pt', use_vanilla_word2vec=False)
     hrt.train()
     hrt.save_model()
     # hrt.data.save("data/tiny_corpus_loaded.pt")

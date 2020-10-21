@@ -10,6 +10,8 @@ from anymat2vec import MODELS_DIR
 from anymat2vec.hidden_rep.data import DataReader, HiddenRepDataset
 from anymat2vec.hidden_rep.model import HiddenRepModel
 import os
+from torch.utils.tensorboard import SummaryWriter
+import numpy as np
 
 
 class HiddenRepTrainer:
@@ -17,8 +19,8 @@ class HiddenRepTrainer:
     Parts adapted from https://github.com/Andras7/word2vec-pytorch/blob/master/word2vec/trainer.py
     """
 
-    def __init__(self, input_file, save_directory_name="hr_save", emb_dimension=100, hidden_size=20, batch_size=32,
-                 window_size=5, n_epochs=3, initial_lr=0.001, min_count=10, use_vanilla_word2vec=False):
+    def __init__(self, input_file, save_directory_name="hr_save", emb_dimension=200, hidden_size=20, batch_size=32,
+                 window_size=8, n_epochs=30, initial_lr=0.0005, min_count=10, use_vanilla_word2vec=False):
 
         _, file_extension = os.path.splitext(input_file)
 
@@ -45,9 +47,9 @@ class HiddenRepTrainer:
         self.initial_lr = initial_lr
         self.hidden_size = hidden_size
         self.stoichiometries = torch.cat((torch.zeros((self.data.num_regular_words,
-                                                         self.data.stoichiometries.size()[1]),
-                                                        dtype=self.data.stoichiometries.dtype),
-                                            self.data.stoichiometries.to_dense()))
+                                                       self.data.stoichiometries.size()[1]),
+                                                      dtype=self.data.stoichiometries.dtype),
+                                          self.data.stoichiometries.to_dense()))
         self.hidden_rep_model = HiddenRepModel(self.emb_size,
                                                self.emb_dimension,
                                                self.hidden_size,
@@ -60,14 +62,18 @@ class HiddenRepTrainer:
             self.hidden_rep_model.cuda()
 
     def train(self):
+
+        writer = SummaryWriter()
+
         # Send stoichiometry tensor to GPU
         self.stoichiometries = self.stoichiometries.to(self.device)
+        optimizer = optim.Adam(self.hidden_rep_model.parameters(), lr=self.initial_lr)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, len(self.dataloader) * self.n_epochs)
+
         for epoch in range(self.n_epochs):
             print("\n\n\nEpoch: " + str(epoch + 1))
-            optimizer = optim.Adam(self.hidden_rep_model.parameters(), lr=self.initial_lr)
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, len(self.dataloader))
-
             running_loss = 0.0
+            losses = []
             for i, sample_batched in enumerate(tqdm(self.dataloader)):
 
                 if len(sample_batched[0]) > 1:
@@ -85,13 +91,21 @@ class HiddenRepTrainer:
                     running_loss = running_loss * 0.9 + loss.item() * 0.1
                     if i > 0 and i % 500 == 0:
                         print(" Loss: " + str(running_loss))
+                        losses.append(loss.item())
+                        if i > 0 and i % 500 == 0:
+                            writer.add_scalar('Loss', np.mean(losses), i)
+                            losses = []
+            hrt.save_model(checkpoint_number=epoch)
 
-    def save_model(self, save_dir=os.path.join(MODELS_DIR, "hr_checkpoints")):
-        self.hidden_rep_model.save(os.path.join(save_dir, "checkpoint.pt"))
+    def save_model(self, save_dir=os.path.join(MODELS_DIR, "hr_checkpoints"), checkpoint_number=None):
+        if checkpoint_number:
+            fn = f"checkpoint_epoch_{checkpoint_number}.pt"
+        else:
+            fn = "checkpoint.pt"
+        self.hidden_rep_model.save(os.path.join(save_dir, fn))
 
 
 if __name__ == '__main__':
     hrt = HiddenRepTrainer(input_file='data/relevant_abstracts.pt', use_vanilla_word2vec=False)
     hrt.train()
-    hrt.save_model()
     # hrt.data.save("data/tiny_corpus_loaded.pt")

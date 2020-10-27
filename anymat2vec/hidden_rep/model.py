@@ -16,7 +16,7 @@ class HiddenRepModel(nn.Module):
     v_embedding: Embedding for context words.
     """
 
-    def __init__(self, emb_size, emb_dimension, hidden_size, stoichiometries):
+    def __init__(self, emb_size, emb_dimension, hidden_size, stoichiometries, num_regular_words):
         """
         Note: The vocabulary used by this model needs to be a bit special.
         The total vocab size, V = W + M, where W is the number of regular words, and
@@ -35,12 +35,13 @@ class HiddenRepModel(nn.Module):
         self.hidden_size = hidden_size
         self.stoich_size = stoichiometries.shape[0]
         self.stoich_dimension = stoichiometries.shape[1]
-        self.u_embeddings = nn.Embedding(emb_size, emb_dimension, sparse=True)
-        self.v_embeddings = nn.Embedding(emb_size, emb_dimension, sparse=True)
+        self.u_embeddings = nn.Embedding(emb_size, emb_dimension)
+        self.v_embeddings = nn.Embedding(emb_size, emb_dimension)
+        self.num_regular_words = num_regular_words
         initrange = 1.0 / self.emb_dimension
         init.uniform_(self.u_embeddings.weight.data, -initrange, initrange)
         init.constant_(self.v_embeddings.weight.data, 0)
-        self.stoichiometries = stoichiometries
+        self.stoichiometries = nn.Embedding.from_pretrained(stoichiometries, freeze=True)
         # target material embedding generator
         self.tmeg = self.make_stoich_to_emb_nn()
         # context material embedding generator
@@ -74,6 +75,27 @@ class HiddenRepModel(nn.Module):
         else:
             return self.u_embeddings.weight[u]
 
+    def _masked_score(self, emb_u, emb_v, emb_neg_v, u_mask, v_mask, neg_v_mask):
+
+        pos_score = torch.sum(torch.mul(emb_u, emb_v), dim=1)
+        pos_score = torch.clamp(pos_score, max=10, min=-10)
+        pos_score = -F.logsigmoid(pos_score)
+        # Mask out scores contributed by unwanted positive context words
+        pos_score[v_mask] = 0
+
+        neg_score = torch.bmm(emb_neg_v, emb_u.unsqueeze(2)).squeeze()
+        neg_score = torch.clamp(neg_score, max=10, min=-10)
+        neg_score = F.logsigmoid(-neg_score)
+        # Mask out scores contributed by unwanted negative samples
+        neg_score[neg_v_mask] = 0
+        neg_score = -torch.sum(neg_score, dim=1)
+
+        total_score = pos_score + neg_score
+        # Mask out scores contributed by unwanted target words
+        total_score[u_mask] = 0
+
+        return total_score
+
     def forward(self, pos_u, pos_v, neg_v):
         """
         There are 4 cases:
@@ -91,24 +113,31 @@ class HiddenRepModel(nn.Module):
             pos_v: Index of context word.
             neg_v: Indices of negative sampled words.
         """
-        emb_v = torch.stack([self._fetch_or_generate_context_embedding(neg_v_i) for neg_v_i in pos_v])
-        emb_u = torch.stack([self._fetch_or_generate_target_embedding(neg_v_i) for neg_v_i in pos_u])
-        emb_neg_v = torch.stack(
-            [torch.stack([self._fetch_or_generate_context_embedding(neg_v_i) for neg_v_i in neg_v_r]) for neg_v_r in
-             neg_v])
+        emb_u_w = self.u_embeddings(pos_u)
+        emb_v_w = self.v_embeddings(pos_v)
+        emb_neg_v_w = self.v_embeddings(neg_v)
 
-        # cross product of the context word with center word
-        pos_score = torch.sum(torch.mul(emb_u, emb_v), dim=1)
-        pos_score = torch.clamp(pos_score, max=10, min=-10)
-        pos_score = -F.logsigmoid(pos_score)
+        emb_u_m = self.tmeg(self.stoichiometries(pos_u))
+        emb_v_m = self.cmeg(self.stoichiometries(pos_v))
+        emb_neg_v_m = self.cmeg(self.stoichiometries(neg_v))
 
-        # batch matrix-matrix product, calculates the cross products
-        # of the negative samples with center word
-        neg_score = torch.bmm(emb_neg_v, emb_u.unsqueeze(2)).squeeze()
-        neg_score = torch.clamp(neg_score, max=10, min=-10)
-        neg_score = -torch.sum(F.logsigmoid(-neg_score), dim=1)
+        emb_u_mask_pairs = [(emb_u_w, pos_u.ge(self.num_regular_words)),
+                            (emb_u_m, pos_u.lt(self.num_regular_words))]
 
-        return torch.mean(pos_score + neg_score)
+        emb_v_mask_pairs = [(emb_v_w, pos_v.ge(self.num_regular_words)),
+                            (emb_v_m, pos_v.lt(self.num_regular_words))]
+
+        emb_neg_v_mask_pairs = [(emb_neg_v_w, neg_v.ge(self.num_regular_words)),
+                                (emb_neg_v_m, neg_v.lt(self.num_regular_words))]
+
+        scores = []
+        for emb_u, u_mask in emb_u_mask_pairs:
+            for emb_v, v_mask in emb_v_mask_pairs:
+                for emb_neg_v, neg_v_mask in emb_neg_v_mask_pairs:
+                    scores.append(self._masked_score(emb_u, emb_v, emb_neg_v, u_mask, v_mask, neg_v_mask))
+        scores = torch.stack(scores)
+        scores = torch.sum(scores, dim=0)
+        return torch.mean(scores)
 
     def save(self, filepath, overwrite=False):
         if os.path.exists(filepath) and not overwrite:

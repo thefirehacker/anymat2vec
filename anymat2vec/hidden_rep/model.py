@@ -82,6 +82,7 @@ class HiddenRepModel(nn.Module):
         pos_score = -F.logsigmoid(pos_score)
         # Mask out scores contributed by unwanted positive context words
         pos_score[v_mask] = 0
+        pos_score = pos_score 
 
         neg_score = torch.bmm(emb_neg_v, emb_u.unsqueeze(2)).squeeze()
         neg_score = torch.clamp(neg_score, max=10, min=-10)
@@ -94,7 +95,8 @@ class HiddenRepModel(nn.Module):
         # Mask out scores contributed by unwanted target words
         total_score[u_mask] = 0
 
-        return total_score
+        # Account for scores being counted twice
+        return total_score / 2
 
     def forward(self, pos_u, pos_v, neg_v):
         """

@@ -3,11 +3,12 @@ Parts of this code were adapted from https://github.com/Andras7/word2vec-pytorch
 
 """
 
+import os
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import init
-import os
 
 
 class HiddenRepModel(nn.Module):
@@ -42,10 +43,11 @@ class HiddenRepModel(nn.Module):
         init.uniform_(self.u_embeddings.weight.data, -initrange, initrange)
         init.constant_(self.v_embeddings.weight.data, 0)
         self.stoichiometries = nn.Embedding.from_pretrained(stoichiometries, freeze=True)
-        # target material embedding generator
-        self.tmeg = self.make_stoich_to_emb_nn()
-        # context material embedding generator
-        self.cmeg = self.make_stoich_to_emb_nn()
+        self.shared_generator = self.make_stoich_to_emb_nn()
+        # target material embedding generator head
+        self.tmeg = torch.nn.Linear(self.hidden_size, self.emb_dimension)
+        # context material embedding generator head
+        self.cmeg = torch.nn.Linear(self.hidden_size, self.emb_dimension)
 
     def make_stoich_to_emb_nn(self):
         """ Initializes the neural network for turning a stoichiometry vector
@@ -58,22 +60,17 @@ class HiddenRepModel(nn.Module):
         model = torch.nn.Sequential(
             torch.nn.Linear(self.stoich_dimension, self.hidden_size),
             torch.nn.ReLU(),
-            torch.nn.Linear(self.hidden_size, self.emb_dimension))
+            torch.nn.Linear(self.hidden_size, self.hidden_size),
+            torch.nn.ReLU())
         return model
 
-    def _fetch_or_generate_context_embedding(self, v):
-        if v >= self.emb_size:
-            stoich = self.stoichiometries[v - self.emb_size].transpose(-1, 0)
-            return self.cmeg(stoich)
+    def _generate_embedding(self, uv, context=False):
+        stoich = self.stoichiometries(uv)
+        hrelu = self.shared_generator(stoich)
+        if context:
+            return self.cmeg(hrelu)
         else:
-            return self.v_embeddings.weight[v]
-
-    def _fetch_or_generate_target_embedding(self, u):
-        if u >= self.emb_size:
-            stoich = self.stoichiometries[u - self.emb_size].transpose(-1, 0)
-            return self.tmeg(stoich)
-        else:
-            return self.u_embeddings.weight[u]
+            return self.tmeg(hrelu)
 
     def _masked_score(self, emb_u, emb_v, emb_neg_v, u_mask, v_mask, neg_v_mask):
 
@@ -94,7 +91,8 @@ class HiddenRepModel(nn.Module):
         # Mask out scores contributed by unwanted target words
         total_score[u_mask] = 0
 
-        return total_score
+        # Account for scores being counted twice
+        return total_score / 2
 
     def forward(self, pos_u, pos_v, neg_v):
         """
@@ -117,16 +115,14 @@ class HiddenRepModel(nn.Module):
         emb_v_w = self.v_embeddings(pos_v)
         emb_neg_v_w = self.v_embeddings(neg_v)
 
-        emb_u_m = self.tmeg(self.stoichiometries(pos_u))
-        emb_v_m = self.cmeg(self.stoichiometries(pos_v))
-        emb_neg_v_m = self.cmeg(self.stoichiometries(neg_v))
+        emb_u_m = self._generate_embedding(pos_u)
+        emb_v_m = self._generate_embedding(pos_v, context=True)
+        emb_neg_v_m = self._generate_embedding(neg_v, context=True)
 
         emb_u_mask_pairs = [(emb_u_w, pos_u.ge(self.num_regular_words)),
                             (emb_u_m, pos_u.lt(self.num_regular_words))]
-
         emb_v_mask_pairs = [(emb_v_w, pos_v.ge(self.num_regular_words)),
                             (emb_v_m, pos_v.lt(self.num_regular_words))]
-
         emb_neg_v_mask_pairs = [(emb_neg_v_w, neg_v.ge(self.num_regular_words)),
                                 (emb_neg_v_m, neg_v.lt(self.num_regular_words))]
 

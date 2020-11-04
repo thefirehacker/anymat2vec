@@ -20,7 +20,7 @@ class HiddenRepTrainer:
     """
 
     def __init__(self, input_file, save_directory_name="hr_save", emb_dimension=200, hidden_size=20, batch_size=32,
-                 window_size=8, n_epochs=30, initial_lr=0.0005, min_count=10, use_vanilla_word2vec=False):
+                 window_size=8, n_epochs=30, initial_lr=0.001, min_count=10, use_vanilla_word2vec=False):
 
         _, file_extension = os.path.splitext(input_file)
 
@@ -73,7 +73,6 @@ class HiddenRepTrainer:
         for epoch in range(self.n_epochs):
             print("\n\n\nEpoch: " + str(epoch + 1))
             running_loss = 0.0
-            losses = []
             for i, sample_batched in enumerate(tqdm(self.dataloader)):
 
                 if len(sample_batched[0]) > 1:
@@ -89,12 +88,9 @@ class HiddenRepTrainer:
                     optimizer.step()
 
                     running_loss = running_loss * 0.9 + loss.item() * 0.1
-                    if i > 0 and i % 500 == 0:
+                    if i > 0 and i % 100 == 0:
                         print(" Loss: " + str(running_loss))
-                        losses.append(loss.item())
-                        if i > 0 and i % 500 == 0:
-                            writer.add_scalar('Loss', np.mean(losses), i)
-                            losses = []
+                        writer.add_scalar('Loss', loss.item(), i)
             hrt.save_model(checkpoint_number=epoch)
 
     def save_model(self, save_dir=os.path.join(MODELS_DIR, "hr_checkpoints"), checkpoint_number=None):
@@ -106,6 +102,6 @@ class HiddenRepTrainer:
 
 
 if __name__ == '__main__':
-    hrt = HiddenRepTrainer(input_file='data/relevant_abstracts.pt', use_vanilla_word2vec=False)
+    hrt = HiddenRepTrainer(input_file='data/relevant_abstracts.pt', batch_size=32)
     hrt.train()
     # hrt.data.save("data/tiny_corpus_loaded.pt")

@@ -69,12 +69,13 @@ np.random.seed(12345)
 class DataReader:
     NEGATIVE_TABLE_SIZE = 1e8
 
-    def __init__(self, corpus_file, min_count, allow_discard_materials=True, n_elements=118):
+    def __init__(self, corpus_file, min_count, allow_discard_materials=True, n_elements=118, downsampling=0.0001):
         self.allow_discard_materials = allow_discard_materials
         self.negatives = []
         self.discards = []
         self.negpos = 0
         self.n_elements = n_elements
+        self.downsampling = downsampling
 
         self.word2id = dict()
         self.id2word = dict()
@@ -149,12 +150,11 @@ class DataReader:
         print("Total materials: " + str(len(material_frequency)))
 
     def init_table_discards(self):
-        t = 0.0001
 
         # Normalized frequency of each word
         f = np.array(list(self.word_frequency.values())) / self.token_count
 
-        self.discards = np.sqrt(t / f) + (t / f)
+        self.discards = np.sqrt(self.downsampling / f) + (self.downsampling / f)
 
         if not self.allow_discard_materials:
             # Never discard materials

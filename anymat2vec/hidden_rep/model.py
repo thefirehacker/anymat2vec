@@ -79,6 +79,7 @@ class HiddenRepModel(nn.Module):
         pos_score = -F.logsigmoid(pos_score)
         # Mask out scores contributed by unwanted positive context words
         pos_score[v_mask] = 0
+        pos_score = pos_score 
 
         neg_score = torch.bmm(emb_neg_v, emb_u.unsqueeze(2)).squeeze()
         neg_score = torch.clamp(neg_score, max=10, min=-10)

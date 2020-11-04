@@ -90,7 +90,7 @@ class HiddenRepTrainer:
                     running_loss = running_loss * 0.9 + loss.item() * 0.1
                     if i > 0 and i % 100 == 0:
                         print(" Loss: " + str(running_loss))
-                        writer.add_scalar('Loss', loss.item(), i)
+                        writer.add_scalar('Loss', loss.item(), i + epoch*len(self.dataloader.dataset))
             hrt.save_model(checkpoint_number=epoch)
 
     def save_model(self, save_dir=os.path.join(MODELS_DIR, "hr_checkpoints"), checkpoint_number=None):

@@ -20,7 +20,7 @@ class HiddenRepTrainer:
     """
 
     def __init__(self, input_file, save_directory_name="hr_save", emb_dimension=200, hidden_size=20, batch_size=32,
-                 window_size=8, n_epochs=30, initial_lr=0.001, min_count=10, use_vanilla_word2vec=False):
+                 window_size=8, n_epochs=10, initial_lr=0.001, min_count=10, use_vanilla_word2vec=False):
 
         _, file_extension = os.path.splitext(input_file)
 
@@ -96,7 +96,7 @@ class HiddenRepTrainer:
             hrt.save_model(checkpoint_number=epoch)
 
     def save_model(self, save_dir=os.path.join(MODELS_DIR, "hr_checkpoints"), checkpoint_number=None):
-        if checkpoint_number:
+        if checkpoint_number is None:
             fn = f"checkpoint_epoch_{checkpoint_number}.pt"
         else:
             fn = "checkpoint.pt"
@@ -106,4 +106,3 @@ class HiddenRepTrainer:
 if __name__ == '__main__':
     hrt = HiddenRepTrainer(input_file='data/relevant_abstracts.pt', batch_size=32, initial_lr=0.0005)
     hrt.train()
-    # hrt.data.save("data/tiny_corpus_loaded.pt")

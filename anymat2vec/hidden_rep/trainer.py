@@ -83,14 +83,16 @@ class HiddenRepTrainer:
 
                     scheduler.step()
                     optimizer.zero_grad()
-                    loss = self.hidden_rep_model.forward(pos_u, pos_v, neg_v)
+                    loss, sublosses = self.hidden_rep_model.forward(pos_u, pos_v, neg_v)
                     loss.backward()
                     optimizer.step()
 
                     running_loss = running_loss * 0.9 + loss.item() * 0.1
                     if i > 0 and i % 100 == 0:
-                        print(" Loss: " + str(running_loss))
-                        writer.add_scalar('Loss', loss.item(), i + epoch*len(self.dataloader.dataset))
+                        print("Total Loss: " + str(running_loss))
+                        losses = {key.upper(): item.item() for key, item in sublosses.items()}
+                        losses["Total"] = loss.item()
+                        writer.add_scalars('run', losses, i + epoch * len(self.dataloader.dataset))
             hrt.save_model(checkpoint_number=epoch)
 
     def save_model(self, save_dir=os.path.join(MODELS_DIR, "hr_checkpoints"), checkpoint_number=None):
@@ -102,6 +104,6 @@ class HiddenRepTrainer:
 
 
 if __name__ == '__main__':
-    hrt = HiddenRepTrainer(input_file='data/relevant_abstracts.pt', batch_size=32)
+    hrt = HiddenRepTrainer(input_file='data/relevant_abstracts.pt', batch_size=32, initial_lr=0.0005)
     hrt.train()
     # hrt.data.save("data/tiny_corpus_loaded.pt")

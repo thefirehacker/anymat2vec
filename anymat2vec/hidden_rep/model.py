@@ -119,21 +119,29 @@ class HiddenRepModel(nn.Module):
         emb_v_m = self._generate_embedding(pos_v, context=True)
         emb_neg_v_m = self._generate_embedding(neg_v, context=True)
 
-        emb_u_mask_pairs = [(emb_u_w, pos_u.ge(self.num_regular_words)),
-                            (emb_u_m, pos_u.lt(self.num_regular_words))]
-        emb_v_mask_pairs = [(emb_v_w, pos_v.ge(self.num_regular_words)),
-                            (emb_v_m, pos_v.lt(self.num_regular_words))]
-        emb_neg_v_mask_pairs = [(emb_neg_v_w, neg_v.ge(self.num_regular_words)),
-                                (emb_neg_v_m, neg_v.lt(self.num_regular_words))]
+        emb_u_mask_pairs = [(emb_u_w, pos_u.ge(self.num_regular_words), "w"),
+                            (emb_u_m, pos_u.lt(self.num_regular_words), "m")]
+        emb_v_mask_pairs = [(emb_v_w, pos_v.ge(self.num_regular_words), "w"),
+                            (emb_v_m, pos_v.lt(self.num_regular_words), "m")]
+        emb_neg_v_mask_pairs = [(emb_neg_v_w, neg_v.ge(self.num_regular_words), "w"),
+                                (emb_neg_v_m, neg_v.lt(self.num_regular_words), "m")]
 
-        scores = []
-        for emb_u, u_mask in emb_u_mask_pairs:
-            for emb_v, v_mask in emb_v_mask_pairs:
-                for emb_neg_v, neg_v_mask in emb_neg_v_mask_pairs:
-                    scores.append(self._masked_score(emb_u, emb_v, emb_neg_v, u_mask, v_mask, neg_v_mask))
-        scores = torch.stack(scores)
-        scores = torch.sum(scores, dim=0)
-        return torch.mean(scores)
+        subscores = {"mmm": [], "mwm": [], "mmw": [], "mww": [],
+                     "www": [], "wmw": [], "wwm": [], "wmm": []}
+        subscores = {}
+        for emb_u, u_mask, u_type in emb_u_mask_pairs:
+            for emb_v, v_mask, v_type in emb_v_mask_pairs:
+                for emb_neg_v, neg_v_mask, neg_v_type in emb_neg_v_mask_pairs:
+                    s = self._masked_score(emb_u, emb_v, emb_neg_v, u_mask, v_mask, neg_v_mask)
+                    subscores[u_type + v_type + neg_v_type] = s
+
+        all_scores = []
+        for key, s in subscores.items():
+            all_scores.append(s)
+            subscores[key] = torch.mean(s)
+        all_scores = torch.stack(all_scores)
+        all_scores = torch.sum(all_scores, dim=0)
+        return torch.mean(all_scores), subscores
 
     def save(self, filepath, overwrite=False):
         if os.path.exists(filepath) and not overwrite:

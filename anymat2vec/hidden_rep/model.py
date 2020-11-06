@@ -127,8 +127,6 @@ class HiddenRepModel(nn.Module):
         emb_neg_v_mask_pairs = [(emb_neg_v_w, neg_v.ge(self.num_regular_words), "w"),
                                 (emb_neg_v_m, neg_v.lt(self.num_regular_words), "m")]
 
-        subscores = {"mmm": [], "mwm": [], "mmw": [], "mww": [],
-                     "www": [], "wmw": [], "wwm": [], "wmm": []}
         subscores = {}
         for emb_u, u_mask, u_type in emb_u_mask_pairs:
             for emb_v, v_mask, v_type in emb_v_mask_pairs:

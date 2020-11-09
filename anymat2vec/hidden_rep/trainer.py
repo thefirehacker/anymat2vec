@@ -46,20 +46,24 @@ class HiddenRepTrainer:
         self.n_epochs = n_epochs
         self.initial_lr = initial_lr
         self.hidden_size = hidden_size
+
+        self.use_cuda = torch.cuda.is_available()
+        self.device = torch.device("cuda" if self.use_cuda else "cpu")
+
         self.stoichiometries = torch.cat((torch.zeros((self.data.num_regular_words,
                                                        self.data.stoichiometries.size()[1]),
                                                       dtype=self.data.stoichiometries.dtype),
                                           self.data.stoichiometries.to_dense()))
+
+
         self.hidden_rep_model = HiddenRepModel(self.emb_size,
                                                self.emb_dimension,
                                                self.hidden_size,
                                                self.stoichiometries,
                                                self.num_regular_words)
 
-        self.use_cuda = torch.cuda.is_available()
-        self.device = torch.device("cuda" if self.use_cuda else "cpu")
         if self.use_cuda:
-            self.hidden_rep_model.cuda()
+            self.hidden_rep_model = self.hidden_rep_model.cuda()
 
     def train(self):
 
@@ -93,16 +97,21 @@ class HiddenRepTrainer:
                         losses = {key.upper(): item.item() for key, item in sublosses.items()}
                         losses["Total"] = loss.item()
                         writer.add_scalars('run', losses, i + epoch * len(self.dataloader.dataset))
+
             hrt.save_model(checkpoint_number=epoch)
 
     def save_model(self, save_dir=os.path.join(MODELS_DIR, "hr_checkpoints"), checkpoint_number=None):
-        if checkpoint_number is None:
+        if checkpoint_number is not None:
             fn = f"checkpoint_epoch_{checkpoint_number}.pt"
+            kv_fn = f"kv_epoch_{checkpoint_number}.txt"
         else:
             fn = "checkpoint.pt"
-        self.hidden_rep_model.save(os.path.join(save_dir, fn))
+            kv_fn = "kv.txt"
 
+        self.hidden_rep_model.save(os.path.join(save_dir, fn))
+        self.hidden_rep_model.save_keyed_vectors(self.data.id2word, kv_fn)
 
 if __name__ == '__main__':
     hrt = HiddenRepTrainer(input_file='data/relevant_abstracts.pt', batch_size=32, initial_lr=0.0005)
     hrt.train()
+    # hrt.data.save("data/tiny_corpus_loaded.pt")

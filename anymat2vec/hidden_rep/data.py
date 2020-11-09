@@ -185,10 +185,10 @@ class DataReader:
             for key, value in sparse_mat.items():
                 indices.append([i, key])
                 values.append(value)
-        indices = torch.LongTensor(indices)
-        values = torch.FloatTensor(values)
-        dimensions = torch.Size([len(self.materials), self.n_elements])
-        self.stoichiometries = torch.sparse.FloatTensor(indices.t(), values, dimensions)
+        self.indices = torch.LongTensor(indices)
+        self.values = torch.FloatTensor(values)
+        self.dimensions = torch.Size([len(self.materials), self.n_elements])
+        self.stoichiometries = torch.sparse.FloatTensor(self.indices.t(), self.values, self.dimensions)
 
     def discard_materials(self, discard_list):
         """
@@ -215,11 +215,14 @@ class DataReader:
         self.negatives = self.original_negatives
 
     def save(self, filepath):
+        self.stoichiometries = None
         torch.save(self, filepath)
+        self.from_save(filepath)
 
     @staticmethod
     def from_save(filepath):
         data = torch.load(filepath)
+        data.stoichiometries = torch.sparse.FloatTensor(data.indices, data.values, data.dimensions)
         data.input_file = filepath.replace(".pt", ".txt")
         return data
 

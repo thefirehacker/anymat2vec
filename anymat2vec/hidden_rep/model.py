@@ -165,7 +165,7 @@ class HiddenRepModel(nn.Module):
                 f.write('%d %d\n' % (len(id2word), self.emb_dimension))
                 for wid, w in id2word.items():
                     e = ' '.join(map(lambda x: str(x), fetch_or_generate_target_embedding(wid).cpu().detach().numpy()))
-                        f.write('%s %s\n' % (w, e))
+                    f.write('%s %s\n' % (w, e))
 
     @staticmethod
     def load_from_file(filepath):

@@ -59,9 +59,9 @@ class HiddenRepModel(nn.Module):
         """
         model = torch.nn.Sequential(
             torch.nn.Linear(self.stoich_dimension, self.hidden_size),
-            torch.nn.ReLU(),
+            torch.nn.Tanh(),
             torch.nn.Linear(self.hidden_size, self.hidden_size),
-            torch.nn.ReLU())
+            torch.nn.Tanh())
         return model
 
     def _generate_embedding(self, uv, context=False):
@@ -148,7 +148,10 @@ class HiddenRepModel(nn.Module):
             if yn.lower() != "y":
                 return None
         else:
-            os.mkdir(os.path.dirname(filepath))
+            try:
+                os.mkdir(os.path.dirname(filepath))
+            except FileExistsError:
+                pass
         torch.save(self, filepath)
 
     def save_keyed_vectors(self, id2word, file_name):
@@ -157,8 +160,9 @@ class HiddenRepModel(nn.Module):
         """
         def fetch_or_generate_target_embedding(u):
             if u >= self.num_regular_words:
-                 stoich = self.stoichiometries.weight[u].transpose(-1, 0)
-                 return self.tmeg(stoich.unsqueeze(0)).squeeze()
+                 stoich = self.stoichiometries.weight[u].unsqueeze(0)
+                 stoich = self.shared_generator(stoich)
+                 return self.tmeg(stoich).squeeze()
             else:
                 return self.u_embeddings.weight[u]
         with open(file_name, 'w') as f:

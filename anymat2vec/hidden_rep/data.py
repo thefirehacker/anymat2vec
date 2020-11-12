@@ -50,7 +50,7 @@ def get_stoichiometry_vector(formula, normalize=True):
     for el, amt in composition_dict.items():
         vec[Element(el).number - 1] = amt
     if normalize:
-        vec = vec / np.linalg.norm(vec)
+        vec = vec / np.sum(vec)
     return vec, composition_dict
 
 

@@ -58,10 +58,12 @@ class HiddenRepModel(nn.Module):
 
         """
         model = torch.nn.Sequential(
+            torch.nn.Tanh(),
             torch.nn.Linear(self.stoich_dimension, self.hidden_size),
             torch.nn.Tanh(),
-            torch.nn.Linear(self.hidden_size, self.hidden_size),
-            torch.nn.Tanh())
+            #torch.nn.Linear(self.hidden_size, self.hidden_size),
+            #torch.nn.Tanh()
+        )
         return model
 
     def _generate_embedding(self, uv, context=False):
@@ -140,9 +142,18 @@ class HiddenRepModel(nn.Module):
             subscores[key] = torch.mean(s)
         all_scores = torch.stack(all_scores)
         all_scores = torch.sum(all_scores, dim=0)
-        return torch.mean(all_scores), subscores
 
-    def save(self, filepath, overwrite=False):
+        L2Loss = 0
+        for param in self.shared_generator.parameters():
+            L2Loss += torch.linalg.norm(param,ord=1)
+
+
+        weight_decay = 1.0
+
+        all_scores = torch.mean(all_scores) + weight_decay*L2Loss
+        return all_scores, subscores
+
+    def save(self, filepath, overwrite=True):
         if os.path.exists(filepath) and not overwrite:
             yn = input(f"Save file already exists at {filepath}. Overwrite?\nY/N: ")
             if yn.lower() != "y":

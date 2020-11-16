@@ -1,4 +1,4 @@
-:compounds_structures
+: compounds_structures
 AlAs zincblende AlN wurtzite
 AlAs zincblende CdS wurtzite
 AlAs zincblende CdSe wurtzite

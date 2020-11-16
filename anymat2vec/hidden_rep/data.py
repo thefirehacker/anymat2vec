@@ -57,9 +57,10 @@ def get_stoichiometry_vector(formula, normalize=True):
 def get_stoichiometry_sparse(formula):
     vec, composition_dict = get_stoichiometry_vector(formula, normalize=False)
     output_dict = {}
+    composition_sum = float(np.sum(vec))
     for el, amt in composition_dict.items():
         vec[Element(el).number - 1] = amt
-        output_dict[Element(el).number - 1] = amt / np.linalg.norm(vec)
+        output_dict[Element(el).number - 1] = amt / composition_sum
     return output_dict
 
 
@@ -217,12 +218,13 @@ class DataReader:
     def save(self, filepath):
         self.stoichiometries = None
         torch.save(self, filepath)
+        self.stoichiometries = torch.sparse.FloatTensor(self.indices.t(), self.values, self.dimensions)
         self.from_save(filepath)
 
     @staticmethod
     def from_save(filepath):
         data = torch.load(filepath)
-        data.stoichiometries = torch.sparse.FloatTensor(data.indices, data.values, data.dimensions)
+        data.stoichiometries = torch.sparse.FloatTensor(data.indices.t(), data.values, data.dimensions)
         data.input_file = filepath.replace(".pt", ".txt")
         return data
 

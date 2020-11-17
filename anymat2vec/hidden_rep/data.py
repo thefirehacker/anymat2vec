@@ -11,6 +11,9 @@ from torch.utils.data import Dataset
 from mat2vec.processing.process import MaterialsTextProcessor
 from collections import defaultdict
 import os
+from roost.utils.data import parse_roost
+from roost.core import LoadFeaturiser
+
 
 processor = MaterialsTextProcessor()
 
@@ -44,32 +47,13 @@ def tokenize(sentence):
     return _process_tokenizer(sentence)
 
 
-def get_stoichiometry_vector(formula, normalize=True):
-    composition_dict = Composition(formula).get_el_amt_dict()
-    vec = np.zeros(118)  # 118 elements on periodic table
-    for el, amt in composition_dict.items():
-        vec[Element(el).number - 1] = amt
-    if normalize:
-        vec = vec / np.linalg.norm(vec)
-    return vec, composition_dict
-
-
-def get_stoichiometry_sparse(formula):
-    vec, composition_dict = get_stoichiometry_vector(formula, normalize=False)
-    output_dict = {}
-    for el, amt in composition_dict.items():
-        vec[Element(el).number - 1] = amt
-        output_dict[Element(el).number - 1] = amt / np.linalg.norm(vec)
-    return output_dict
-
-
 np.random.seed(12345)
 
 
 class DataReader:
     NEGATIVE_TABLE_SIZE = 1e8
 
-    def __init__(self, corpus_file, min_count, allow_discard_materials=True, n_elements=118, downsampling=0.0001):
+    def __init__(self, corpus_file, min_count, fea_path, allow_discard_materials=True, n_elements=118, downsampling=0.0001):
         self.allow_discard_materials = allow_discard_materials
         self.negatives = []
         self.discards = []
@@ -84,6 +68,10 @@ class DataReader:
         self.word_frequency = dict()
         self.materials = set()
         self.num_regular_words = None
+
+        assert os.path.exists(fea_path), "{} does not exist!".format(fea_path)
+        self.elem_features = LoadFeaturiser(fea_path)
+        self.elem_emb_len = self.elem_features.embedding_size
 
         self.input_file = corpus_file
         self.read_words(min_count)
@@ -178,17 +166,12 @@ class DataReader:
         return response
 
     def load_stoichiometries(self):
-        indices = []
-        values = []
+        self.stoichiometries = []
         for i, material in enumerate(self.materials):
-            sparse_mat = get_stoichiometry_sparse(material)
-            for key, value in sparse_mat.items():
-                indices.append([i, key])
-                values.append(value)
-        self.indices = torch.LongTensor(indices)
-        self.values = torch.FloatTensor(values)
-        self.dimensions = torch.Size([len(self.materials), self.n_elements])
-        self.stoichiometries = torch.sparse.FloatTensor(self.indices.t(), self.values, self.dimensions)
+            atom_weights, atom_fea, self_fea_idx, nbr_fea_idx = self.get_stoichiometry_vector(formula)
+            inputs_dict = {"atom_weights": atom_weights, "atom_fea": atom_fea, "self_fea_idx": self_fea_idx, "nbr_fea_idx": nbr_fea_idx}
+            self.stoichiometries.append(inputs_dict)
+            
 
     def discard_materials(self, discard_list):
         """
@@ -214,15 +197,44 @@ class DataReader:
         self.discards = self.original_discards
         self.negatives = self.original_negatives
 
+    def get_stoichiometry_vector(self, formula, normalize=True):
+        elements, weights = parse_roost(formula)
+        weights = np.atleast_2d(weights).T / np.sum(weights)
+        try:
+            atom_fea = np.vstack(
+                [self.elem_features.get_fea(element) for element in elements]
+            )
+        except AssertionError:
+            raise AssertionError(
+                f"cry-id {cry_id} [{composition}] contains element types not in embedding"
+            )
+        except ValueError:
+            raise ValueError(
+                f"cry-id {cry_id} [{composition}] composition cannot be parsed into elements"
+            )
+
+        env_idx = list(range(len(elements)))
+        self_fea_idx = []
+        nbr_fea_idx = []
+        nbrs = len(elements) - 1
+        for i, _ in enumerate(elements):
+            self_fea_idx += [i] * nbrs
+            nbr_fea_idx += env_idx[:i] + env_idx[i + 1 :]
+
+        # convert all data to tensors
+        atom_weights = torch.Tensor(weights)
+        atom_fea = torch.Tensor(atom_fea)
+        self_fea_idx = torch.LongTensor(self_fea_idx)
+        nbr_fea_idx = torch.LongTensor(nbr_fea_idx)
+        
+        return atom_weights, atom_fea, self_fea_idx, nbr_fea_idx
+
     def save(self, filepath):
-        self.stoichiometries = None
         torch.save(self, filepath)
-        self.from_save(filepath)
 
     @staticmethod
     def from_save(filepath):
         data = torch.load(filepath)
-        data.stoichiometries = torch.sparse.FloatTensor(data.indices, data.values, data.dimensions)
         data.input_file = filepath.replace(".pt", ".txt")
         return data
 

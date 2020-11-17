@@ -11,9 +11,11 @@ from torch.utils.data import Dataset
 from mat2vec.processing.process import MaterialsTextProcessor
 from collections import defaultdict
 import os
-from roost.utils.data import parse_roost
+from roost.roost.data import parse_roost
 from roost.core import LoadFeaturiser
 
+
+from anymat2vec.common_data.files import msch_emb_path
 
 processor = MaterialsTextProcessor()
 
@@ -53,7 +55,7 @@ np.random.seed(12345)
 class DataReader:
     NEGATIVE_TABLE_SIZE = 1e8
 
-    def __init__(self, corpus_file, min_count, fea_path, allow_discard_materials=True, n_elements=118, downsampling=0.0001):
+    def __init__(self, corpus_file, min_count, allow_discard_materials=True, n_elements=118, downsampling=0.0001):
         self.allow_discard_materials = allow_discard_materials
         self.negatives = []
         self.discards = []
@@ -69,8 +71,7 @@ class DataReader:
         self.materials = set()
         self.num_regular_words = None
 
-        assert os.path.exists(fea_path), "{} does not exist!".format(fea_path)
-        self.elem_features = LoadFeaturiser(fea_path)
+        self.elem_features = LoadFeaturiser(msch_emb_path)
         self.elem_emb_len = self.elem_features.embedding_size
 
         self.input_file = corpus_file

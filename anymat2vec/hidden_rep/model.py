@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import init
-
+from roost.model import DescriptorNetwork
 
 class HiddenRepModel(nn.Module):
     """
@@ -34,16 +34,24 @@ class HiddenRepModel(nn.Module):
         self.emb_size = emb_size
         self.emb_dimension = emb_dimension
         self.hidden_size = hidden_size
-        self.stoich_size = stoichiometries.shape[0]
-        self.stoich_dimension = stoichiometries.shape[1]
+        self.stoich_size = len(stoichiometries)
         self.u_embeddings = nn.Embedding(emb_size, emb_dimension)
         self.v_embeddings = nn.Embedding(emb_size, emb_dimension)
         self.num_regular_words = num_regular_words
         initrange = 1.0 / self.emb_dimension
         init.uniform_(self.u_embeddings.weight.data, -initrange, initrange)
         init.constant_(self.v_embeddings.weight.data, 0)
-        self.stoichiometries = nn.Embedding.from_pretrained(stoichiometries, freeze=True)
-        self.shared_generator = self.make_stoich_to_emb_nn()
+
+        self.shared_generator = DescriptorNetwork(118,
+        elem_fea_len=self.hidden_size,
+        n_graph=3,
+        elem_heads=3,
+        elem_gate=[256],
+        elem_msg=[256],
+        cry_heads=3,
+        cry_gate=[256],
+        cry_msg=[256])
+
         # target material embedding generator head
         self.tmeg = torch.nn.Linear(self.hidden_size, self.emb_dimension)
         # context material embedding generator head
@@ -65,7 +73,7 @@ class HiddenRepModel(nn.Module):
         return model
 
     def _generate_embedding(self, uv, context=False):
-        stoich = self.stoichiometries(uv)
+        stoich = [self.stoichiometries(u) for u in uv]
         hrelu = self.shared_generator(stoich)
         if context:
             return self.cmeg(hrelu)
@@ -165,7 +173,7 @@ class HiddenRepModel(nn.Module):
                 f.write('%d %d\n' % (len(id2word), self.emb_dimension))
                 for wid, w in id2word.items():
                     e = ' '.join(map(lambda x: str(x), fetch_or_generate_target_embedding(wid).cpu().detach().numpy()))
-                        f.write('%s %s\n' % (w, e))
+                    f.write('%s %s\n' % (w, e))
 
     @staticmethod
     def load_from_file(filepath):

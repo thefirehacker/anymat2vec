@@ -13,7 +13,7 @@ from collections import defaultdict
 import os
 from roost.roost.data import parse_roost
 from roost.core import LoadFeaturiser
-
+from collections import defaultdict
 
 from anymat2vec.common_data.files import msch_emb_path
 
@@ -167,12 +167,12 @@ class DataReader:
         return response
 
     def load_stoichiometries(self):
-        self.stoichiometries = []
+        self.stoichiometries = defaultdict(lambda: (0, 0, 0, 0))
         for i, material in enumerate(self.materials):
             atom_weights, atom_fea, self_fea_idx, nbr_fea_idx = self.get_stoichiometry_vector(formula)
-            inputs_dict = {"atom_weights": atom_weights, "atom_fea": atom_fea, "self_fea_idx": self_fea_idx, "nbr_fea_idx": nbr_fea_idx}
-            self.stoichiometries.append(inputs_dict)
-            
+            inputs_dict = (atom_weights, atom_fea, self_fea_idx, nbr_fea_idx)
+            self.stoichiometries[i] = inputs_dict
+
 
     def discard_materials(self, discard_list):
         """

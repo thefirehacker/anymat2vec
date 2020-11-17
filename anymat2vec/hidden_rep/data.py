@@ -207,11 +207,11 @@ class DataReader:
             )
         except AssertionError:
             raise AssertionError(
-                f"cry-id {cry_id} [{composition}] contains element types not in embedding"
+                f"[{formula}] contains element types not in embedding"
             )
         except ValueError:
             raise ValueError(
-                f"cry-id {cry_id} [{composition}] composition cannot be parsed into elements"
+                f"[{formula}] composition cannot be parsed into elements"
             )
 
         env_idx = list(range(len(elements)))

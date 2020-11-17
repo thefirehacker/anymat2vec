@@ -48,7 +48,10 @@ class HiddenRepModel(nn.Module):
         self.tmeg = torch.nn.Linear(self.hidden_size, self.emb_dimension)
         # context material embedding generator head
         self.cmeg = torch.nn.Linear(self.hidden_size, self.emb_dimension)
+        self.cmat_offset = nn.Parameter(torch.zeros(1, self.emb_dimension, requires_grad=True))
+        self.tmat_offset = nn.Parameter(torch.zeros(1, self.emb_dimension, requires_grad=True))
 
+        
     def make_stoich_to_emb_nn(self):
         """ Initializes the neural network for turning a stoichiometry vector
         into an embedding
@@ -70,9 +73,9 @@ class HiddenRepModel(nn.Module):
         stoich = self.stoichiometries(uv)
         hrelu = self.shared_generator(stoich)
         if context:
-            return self.cmeg(hrelu)
+            return self.cmeg(hrelu) + self.cmat_offset
         else:
-            return self.tmeg(hrelu)
+            return self.tmeg(hrelu) + self.tmat_offset
 
     def _masked_score(self, emb_u, emb_v, emb_neg_v, u_mask, v_mask, neg_v_mask):
 
@@ -143,14 +146,14 @@ class HiddenRepModel(nn.Module):
         all_scores = torch.stack(all_scores)
         all_scores = torch.sum(all_scores, dim=0)
 
-        L2Loss = 0
-        for param in self.shared_generator.parameters():
-            L2Loss += torch.linalg.norm(param,ord=1)
+        #L2Loss = 0
+        #for param in self.shared_generator.parameters():
+        #    L2Loss += torch.linalg.norm(param,ord=1)
 
 
-        weight_decay = 1.0
+        #weight_decay = 1.0
 
-        all_scores = torch.mean(all_scores) + weight_decay*L2Loss
+        all_scores = torch.mean(all_scores)# + weight_decay*L2Loss
         return all_scores, subscores
 
     def save(self, filepath, overwrite=True):

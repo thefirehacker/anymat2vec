@@ -9,7 +9,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import init
-from roost.model import DescriptorNetwork
+
+from roost.roost.model import DescriptorNetwork
 
 class HiddenRepModel(nn.Module):
     """
@@ -35,6 +36,7 @@ class HiddenRepModel(nn.Module):
         self.emb_dimension = emb_dimension
         self.hidden_size = hidden_size
         self.stoich_size = len(stoichiometries)
+        self.stoichiometries = stoichiometries
         self.u_embeddings = nn.Embedding(emb_size, emb_dimension)
         self.v_embeddings = nn.Embedding(emb_size, emb_dimension)
         self.num_regular_words = num_regular_words
@@ -42,38 +44,40 @@ class HiddenRepModel(nn.Module):
         init.uniform_(self.u_embeddings.weight.data, -initrange, initrange)
         init.constant_(self.v_embeddings.weight.data, 0)
 
-        self.shared_generator = DescriptorNetwork(118,
-        elem_fea_len=self.hidden_size,
-        n_graph=3,
-        elem_heads=3,
-        elem_gate=[256],
-        elem_msg=[256],
-        cry_heads=3,
-        cry_gate=[256],
-        cry_msg=[256])
+        self.shared_generator = DescriptorNetwork(
+            118,
+            elem_fea_len=self.hidden_size,
+            n_graph=3,
+            elem_heads=3,
+            elem_gate=[256],
+            elem_msg=[256],
+            cry_heads=3,
+            cry_gate=[256],
+            cry_msg=[256]
+        )
 
         # target material embedding generator head
         self.tmeg = torch.nn.Linear(self.hidden_size, self.emb_dimension)
         # context material embedding generator head
         self.cmeg = torch.nn.Linear(self.hidden_size, self.emb_dimension)
 
-    def make_stoich_to_emb_nn(self):
-        """ Initializes the neural network for turning a stoichiometry vector
-        into an embedding
-
-        TODO: fine-tune this architecture based on cross-validation.
-        I expect some regularization might be called for.
-
-        """
-        model = torch.nn.Sequential(
-            torch.nn.Linear(self.stoich_dimension, self.hidden_size),
-            torch.nn.ReLU(),
-            torch.nn.Linear(self.hidden_size, self.hidden_size),
-            torch.nn.ReLU())
-        return model
+    # def make_stoich_to_emb_nn(self):
+    #     """ Initializes the neural network for turning a stoichiometry vector
+    #     into an embedding
+    #
+    #     TODO: fine-tune this architecture based on cross-validation.
+    #     I expect some regularization might be called for.
+    #
+    #     """
+    #     model = torch.nn.Sequential(
+    #         torch.nn.Linear(self.stoich_dimension, self.hidden_size),
+    #         torch.nn.ReLU(),
+    #         torch.nn.Linear(self.hidden_size, self.hidden_size),
+    #         torch.nn.ReLU())
+    #     return model
 
     def _generate_embedding(self, uv, context=False):
-        stoich = [self.stoichiometries(u) for u in uv]
+        stoich = [self.stoichiometries[u] for u in uv]
         hrelu = self.shared_generator(stoich)
         if context:
             return self.cmeg(hrelu)

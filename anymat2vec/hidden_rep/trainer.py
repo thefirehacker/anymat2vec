@@ -13,6 +13,8 @@ import os
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 
+from anymat2vec.common_data.files import relevant_abstracts_pt
+
 
 class HiddenRepTrainer:
     """
@@ -112,6 +114,6 @@ class HiddenRepTrainer:
         self.hidden_rep_model.save_keyed_vectors(self.data.id2word, kv_fn)
 
 if __name__ == '__main__':
-    hrt = HiddenRepTrainer(input_file='data/relevant_abstracts.pt', batch_size=32, initial_lr=0.0005)
+    hrt = HiddenRepTrainer(input_file=relevant_abstracts_pt, batch_size=32, initial_lr=0.0005)
     hrt.train()
     # hrt.data.save("data/tiny_corpus_loaded.pt")

@@ -169,7 +169,7 @@ class DataReader:
     def load_stoichiometries(self):
         self.stoichiometries = defaultdict(lambda: (0, 0, 0, 0))
         for i, material in enumerate(self.materials):
-            atom_weights, atom_fea, self_fea_idx, nbr_fea_idx = self.get_stoichiometry_vector(formula)
+            atom_weights, atom_fea, self_fea_idx, nbr_fea_idx = self.get_stoichiometry_vector(material)
             inputs_dict = (atom_weights, atom_fea, self_fea_idx, nbr_fea_idx)
             self.stoichiometries[i] = inputs_dict
 

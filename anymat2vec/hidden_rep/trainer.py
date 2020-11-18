@@ -13,6 +13,8 @@ import os
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 
+from anymat2vec.common_data.files import relevant_abstracts_pt
+
 
 class HiddenRepTrainer:
     """

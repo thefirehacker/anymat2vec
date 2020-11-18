@@ -86,6 +86,7 @@ def collate_batch(dataset_list):
         )
 
 
+
 class HiddenRepModel(nn.Module):
     """
     u_embedding: Embedding for center word.
@@ -111,6 +112,7 @@ class HiddenRepModel(nn.Module):
         self.hidden_size = hidden_size
         self.stoichiometries = stoichiometries
         self.stoich_size = len(stoichiometries)
+        self.stoichiometries = stoichiometries
         self.u_embeddings = nn.Embedding(emb_size, emb_dimension)
         self.v_embeddings = nn.Embedding(emb_size, emb_dimension)
         self.num_regular_words = num_regular_words
@@ -128,6 +130,7 @@ class HiddenRepModel(nn.Module):
         cry_gate=[256],
         cry_msg=[256])
 
+
         # target material embedding generator head
         self.tmeg = torch.nn.Linear(self.hidden_size, self.emb_dimension)
         # context material embedding generator head
@@ -137,6 +140,7 @@ class HiddenRepModel(nn.Module):
         stoich = [self.stoichiometries[u] for u in uv]
         roost_input = collate_batch(stoich)
         hrelu = self.shared_generator(*roost_input)
+
         if context:
             return self.cmeg(hrelu)
         else:

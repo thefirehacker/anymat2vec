@@ -186,6 +186,7 @@ class DataReader:
         for i, material in enumerate(self.materials):
             atom_weights, atom_fea, self_fea_idx, nbr_fea_idx = self.get_stoichiometry_vector(material)
             inputs_dict = (atom_weights, atom_fea, self_fea_idx, nbr_fea_idx, i + 1)
+
             self.stoichiometries[i] = inputs_dict
 
     def discard_materials(self, discard_list):

@@ -30,7 +30,7 @@ class HiddenRepTrainer:
             self.data = DataReader.from_save(input_file)
         else:
             self.data = DataReader(input_file, min_count)
-            self.data.save(input_file.replace(".txt", ".pt"))
+            # self.data.save(input_file.replace(".txt", ".pt"))
         dataset = HiddenRepDataset(self.data, window_size)
         self.dataloader = DataLoader(dataset, batch_size=batch_size,
                                      shuffle=False, num_workers=0, collate_fn=dataset.collate)
@@ -48,13 +48,16 @@ class HiddenRepTrainer:
         self.hidden_size = hidden_size
 
         self.use_cuda = torch.cuda.is_available()
+        self.use_cuda = False
         self.device = torch.device("cuda" if self.use_cuda else "cpu")
 
-        self.stoichiometries = torch.cat((torch.zeros((self.data.num_regular_words,
-                                                       self.data.stoichiometries.size()[1]),
-                                                      dtype=self.data.stoichiometries.dtype),
-                                          self.data.stoichiometries.to_dense()))
+        # self.device = torch.device("cpu")
+        # self.stoichiometries = torch.cat((torch.zeros((self.data.num_regular_words,
+        #                                                self.data.stoichiometries.size()[1]),
+        #                                               dtype=self.data.stoichiometries.dtype),
+        #                                   self.data.stoichiometries.to_dense()))
 
+        self.stoichiometries = self.data.stoichiometries
 
         self.hidden_rep_model = HiddenRepModel(self.emb_size,
                                                self.emb_dimension,
@@ -70,7 +73,16 @@ class HiddenRepTrainer:
         writer = SummaryWriter()
 
         # Send stoichiometry tensor to GPU
-        self.stoichiometries = self.stoichiometries.to(self.device)
+        # for k,v in self.stoichiometries.items():
+            # tup = []
+            # for t in v[:-1]:
+                # tup.append(t.to(self.device))
+            # tup.append(v[-1])
+            # self.stoichiometries[k]
+        #That's right, I'm using a mutable default value. Try and stop me.
+        # for t in self.stoichiometries[-1][:-1]:
+            # t = t.to(self.device)
+        # self.stoichiometries = self.stoichiometries.to(self.device)
         optimizer = optim.Adam(self.hidden_rep_model.parameters(), lr=self.initial_lr)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, len(self.dataloader) * self.n_epochs)
 
@@ -112,6 +124,6 @@ class HiddenRepTrainer:
         self.hidden_rep_model.save_keyed_vectors(self.data.id2word, kv_fn)
 
 if __name__ == '__main__':
-    hrt = HiddenRepTrainer(input_file='data/relevant_abstracts.pt', batch_size=32, initial_lr=0.0005)
+    hrt = HiddenRepTrainer(input_file='../common_data/small_abstracts.txt', batch_size=64, initial_lr=0.0005)
     hrt.train()
     # hrt.data.save("data/tiny_corpus_loaded.pt")

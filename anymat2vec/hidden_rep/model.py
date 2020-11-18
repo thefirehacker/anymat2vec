@@ -9,7 +9,82 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import init
-from roost.model import DescriptorNetwork
+from roost.roost.model import DescriptorNetwork
+
+use_cuda = torch.cuda.is_available()
+device = torch.device("cuda" if use_cuda else "cpu")
+device = "cpu"
+
+def collate_batch(dataset_list):
+    """
+    Collate a list of data and return a batch for predicting crystal
+    properties.
+
+    Parameters
+    ----------
+
+    dataset_list: list of tuples for each data point.
+      (atom_fea, nbr_fea, self_fea_idx, nbr_fea_idx)
+
+      atom_fea: torch.Tensor shape (n_i, atom_fea_len)
+      nbr_fea: torch.Tensor shape (n_i, M, nbr_fea_len)
+      self_fea_idx: torch.LongTensor shape (n_i, M)
+      nbr_fea_idx: torch.LongTensor shape (n_i, M)
+
+
+    Returns
+    -------
+    N = sum(n_i); N0 = sum(i)
+
+    batch_atom_weights: torch.Tensor shape (N, 1)
+    batch_atom_fea: torch.Tensor shape (N, orig_atom_fea_len)
+        Atom features from atom type
+    batch_self_fea_idx: torch.LongTensor shape (N, M)
+        Indices of mapping atom to copies of itself
+    batch_nbr_fea_idx: torch.LongTensor shape (N, M)
+        Indices of M neighbors of each atom
+    crystal_atom_idx: list of torch.LongTensor of length N0
+        Mapping from the crystal idx to atom idx
+    """
+    # define the lists
+    batch_atom_weights = []
+    batch_atom_fea = []
+    batch_self_fea_idx = []
+    batch_nbr_fea_idx = []
+    crystal_atom_idx = []
+    batch_cry_ids = []
+
+    cry_base_idx = 0
+    for i, inputs in enumerate(dataset_list):
+        atom_weights, atom_fea, self_fea_idx, nbr_fea_idx, cry_id = inputs
+        # number of atoms for this crystal
+        n_i = atom_fea.shape[0]
+
+        # batch the features together
+        batch_atom_weights.append(atom_weights)
+        batch_atom_fea.append(atom_fea)
+
+        # mappings from bonds to atoms
+        batch_self_fea_idx.append(self_fea_idx + cry_base_idx)
+        batch_nbr_fea_idx.append(nbr_fea_idx + cry_base_idx)
+
+        # mapping from atoms to crystals
+        crystal_atom_idx.append(torch.tensor([i] * n_i))
+
+        # batch the targets and ids
+        batch_cry_ids.append(cry_id)
+
+        # increment the id counter
+        cry_base_idx += n_i
+
+    return (
+            torch.cat(batch_atom_weights, dim=0).to(device),
+            torch.cat(batch_atom_fea, dim=0).to(device),
+            torch.cat(batch_self_fea_idx, dim=0).to(device),
+            torch.cat(batch_nbr_fea_idx, dim=0).to(device),
+            torch.cat(crystal_atom_idx).to(device),
+        )
+
 
 class HiddenRepModel(nn.Module):
     """
@@ -34,6 +109,7 @@ class HiddenRepModel(nn.Module):
         self.emb_size = emb_size
         self.emb_dimension = emb_dimension
         self.hidden_size = hidden_size
+        self.stoichiometries = stoichiometries
         self.stoich_size = len(stoichiometries)
         self.u_embeddings = nn.Embedding(emb_size, emb_dimension)
         self.v_embeddings = nn.Embedding(emb_size, emb_dimension)
@@ -42,7 +118,7 @@ class HiddenRepModel(nn.Module):
         init.uniform_(self.u_embeddings.weight.data, -initrange, initrange)
         init.constant_(self.v_embeddings.weight.data, 0)
 
-        self.shared_generator = DescriptorNetwork(118,
+        self.shared_generator = DescriptorNetwork(200,
         elem_fea_len=self.hidden_size,
         n_graph=3,
         elem_heads=3,
@@ -57,24 +133,10 @@ class HiddenRepModel(nn.Module):
         # context material embedding generator head
         self.cmeg = torch.nn.Linear(self.hidden_size, self.emb_dimension)
 
-    def make_stoich_to_emb_nn(self):
-        """ Initializes the neural network for turning a stoichiometry vector
-        into an embedding
-
-        TODO: fine-tune this architecture based on cross-validation.
-        I expect some regularization might be called for.
-
-        """
-        model = torch.nn.Sequential(
-            torch.nn.Linear(self.stoich_dimension, self.hidden_size),
-            torch.nn.ReLU(),
-            torch.nn.Linear(self.hidden_size, self.hidden_size),
-            torch.nn.ReLU())
-        return model
-
     def _generate_embedding(self, uv, context=False):
-        stoich = [self.stoichiometries(u) for u in uv]
-        hrelu = self.shared_generator(stoich)
+        stoich = [self.stoichiometries[u] for u in uv]
+        roost_input = collate_batch(stoich)
+        hrelu = self.shared_generator(*roost_input)
         if context:
             return self.cmeg(hrelu)
         else:
@@ -126,7 +188,7 @@ class HiddenRepModel(nn.Module):
 
         emb_u_m = self._generate_embedding(pos_u)
         emb_v_m = self._generate_embedding(pos_v, context=True)
-        emb_neg_v_m = self._generate_embedding(neg_v, context=True)
+        emb_neg_v_m = torch.stack([self._generate_embedding(n, context=True) for n in neg_v])
 
         emb_u_mask_pairs = [(emb_u_w, pos_u.ge(self.num_regular_words), "w"),
                             (emb_u_m, pos_u.lt(self.num_regular_words), "m")]

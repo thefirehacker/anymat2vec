@@ -56,6 +56,10 @@ class DataReader:
     NEGATIVE_TABLE_SIZE = 1e8
 
     def __init__(self, corpus_file, min_count, allow_discard_materials=True, n_elements=118, downsampling=0.0001):
+        self.use_cuda = torch.cuda.is_available()
+        self.device = torch.device("cuda" if self.use_cuda else "cpu")
+        self.device = "cpu"
+
         self.allow_discard_materials = allow_discard_materials
         self.negatives = []
         self.discards = []
@@ -82,6 +86,7 @@ class DataReader:
         self.original_negatives = self.negatives.copy()
         self.stoichiometries = None
         self.load_stoichiometries()
+
 
     def read_words(self, min_count):
         """
@@ -112,6 +117,14 @@ class DataReader:
                             print("\rRead " + str(int(self.token_count / 1000000)) + "M words.")
         print("\n")
 
+        #filter out materials with non-allowed elements
+        filtered_materials = []
+        for m in self.materials:
+            elements, _ = parse_roost(m)
+            if all([e in self.elem_features.allowed_types for e in elements]):
+                filtered_materials.append(m)
+
+        self.materials = set(filtered_materials)
         # Build vocabulary, filter out materials
         wid = 0
         for w, c in word_frequency.items():
@@ -167,12 +180,13 @@ class DataReader:
         return response
 
     def load_stoichiometries(self):
-        self.stoichiometries = defaultdict(lambda: (0, 0, 0, 0))
+        #default crystal is H2O
+        default_value = (*self.get_stoichiometry_vector('H2O'), 0)
+        self.stoichiometries = defaultdict(lambda:default_value)
         for i, material in enumerate(self.materials):
-            atom_weights, atom_fea, self_fea_idx, nbr_fea_idx = self.get_stoichiometry_vector(formula)
-            inputs_dict = (atom_weights, atom_fea, self_fea_idx, nbr_fea_idx)
+            atom_weights, atom_fea, self_fea_idx, nbr_fea_idx = self.get_stoichiometry_vector(material)
+            inputs_dict = (atom_weights, atom_fea, self_fea_idx, nbr_fea_idx, i + 1)
             self.stoichiometries[i] = inputs_dict
-
 
     def discard_materials(self, discard_list):
         """
@@ -199,6 +213,7 @@ class DataReader:
         self.negatives = self.original_negatives
 
     def get_stoichiometry_vector(self, formula, normalize=True):
+
         elements, weights = parse_roost(formula)
         weights = np.atleast_2d(weights).T / np.sum(weights)
         try:
@@ -207,11 +222,11 @@ class DataReader:
             )
         except AssertionError:
             raise AssertionError(
-                f"cry-id {cry_id} [{composition}] contains element types not in embedding"
+                f"[{formula}] contains element types not in embedding"
             )
         except ValueError:
             raise ValueError(
-                f"cry-id {cry_id} [{composition}] composition cannot be parsed into elements"
+                f"[{formula}] composition cannot be parsed into elements"
             )
 
         env_idx = list(range(len(elements)))
@@ -223,10 +238,10 @@ class DataReader:
             nbr_fea_idx += env_idx[:i] + env_idx[i + 1 :]
 
         # convert all data to tensors
-        atom_weights = torch.Tensor(weights)
-        atom_fea = torch.Tensor(atom_fea)
-        self_fea_idx = torch.LongTensor(self_fea_idx)
-        nbr_fea_idx = torch.LongTensor(nbr_fea_idx)
+        atom_weights = torch.Tensor(weights).to(self.device)
+        atom_fea = torch.Tensor(atom_fea).to(self.device)
+        self_fea_idx = torch.LongTensor(self_fea_idx).to(self.device)
+        nbr_fea_idx = torch.LongTensor(nbr_fea_idx).to(self.device)
         
         return atom_weights, atom_fea, self_fea_idx, nbr_fea_idx
 

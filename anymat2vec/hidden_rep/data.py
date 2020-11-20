@@ -48,6 +48,24 @@ def tokenize(sentence):
     """
     return _process_tokenizer(sentence)
 
+def get_stoichiometry_vector(formula, normalize=True):
+    composition_dict = Composition(formula).get_el_amt_dict()
+    vec = np.zeros(118)  # 118 elements on periodic table
+    for el, amt in composition_dict.items():
+        vec[Element(el).number - 1] = amt
+    if normalize:
+        vec = vec / np.sum(vec)
+    return vec, composition_dict
+
+
+def get_stoichiometry_sparse(formula):
+    vec, composition_dict = get_stoichiometry_vector(formula, normalize=False)
+    output_dict = {}
+    composition_sum = float(np.sum(vec))
+    for el, amt in composition_dict.items():
+        vec[Element(el).number - 1] = amt
+        output_dict[Element(el).number - 1] = amt / composition_sum
+    return output_dict
 
 np.random.seed(12345)
 
@@ -121,8 +139,10 @@ class DataReader:
         filtered_materials = []
         for m in self.materials:
             elements, _ = parse_roost(m)
-            if all([e in self.elem_features.allowed_types for e in elements]):
+            if all([e in self.elem_features.allowed_types for e in elements]) and len(elements) > 1:
                 filtered_materials.append(m)
+            else:
+                print(elements)
 
         self.materials = set(filtered_materials)
         # Build vocabulary, filter out materials
@@ -180,14 +200,27 @@ class DataReader:
         return response
 
     def load_stoichiometries(self):
-        #default crystal is H2O
-        default_value = (*self.get_stoichiometry_vector('H2O'), 0)
-        self.stoichiometries = defaultdict(lambda:default_value)
+        indices = []
+        values = []
         for i, material in enumerate(self.materials):
-            atom_weights, atom_fea, self_fea_idx, nbr_fea_idx = self.get_stoichiometry_vector(material)
-            inputs_dict = (atom_weights, atom_fea, self_fea_idx, nbr_fea_idx, i + 1)
+            sparse_mat = get_stoichiometry_sparse(material)
+            for key, value in sparse_mat.items():
+                indices.append([i, key])
+                values.append(value)
+        self.indices = torch.LongTensor(indices)
+        self.values = torch.FloatTensor(values)
+        self.dimensions = torch.Size([len(self.materials), self.n_elements])
+        self.stoichiometries = torch.sparse.FloatTensor(self.indices.t(), self.values, self.dimensions)
 
-            self.stoichiometries[i] = inputs_dict
+    # def load_stoichiometries(self):
+    #     #default crystal is H2O
+    #     default_value = (*self.get_stoichiometry_vector('H2O'), 0)
+    #     self.stoichiometries = defaultdict(lambda:default_value)
+    #     for i, material in enumerate(self.materials):
+    #         atom_weights, atom_fea, self_fea_idx, nbr_fea_idx = self.get_stoichiometry_vector(material)
+    #         inputs_dict = (atom_weights, atom_fea, self_fea_idx, nbr_fea_idx, i + 1)
+
+    #         self.stoichiometries[i] = inputs_dict
 
     def discard_materials(self, discard_list):
         """

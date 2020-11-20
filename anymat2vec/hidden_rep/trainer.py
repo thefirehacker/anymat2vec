@@ -50,16 +50,14 @@ class HiddenRepTrainer:
         self.hidden_size = hidden_size
 
         self.use_cuda = torch.cuda.is_available()
-        self.use_cuda = False
+        # self.use_cuda = False
         self.device = torch.device("cuda" if self.use_cuda else "cpu")
 
         # self.device = torch.device("cpu")
-        # self.stoichiometries = torch.cat((torch.zeros((self.data.num_regular_words,
-        #                                                self.data.stoichiometries.size()[1]),
-        #                                               dtype=self.data.stoichiometries.dtype),
-        #                                   self.data.stoichiometries.to_dense()))
-
-        self.stoichiometries = self.data.stoichiometries
+        self.stoichiometries = torch.cat((torch.zeros((self.data.num_regular_words,
+                                                       self.data.stoichiometries.size()[1]),
+                                                      dtype=self.data.stoichiometries.dtype),
+                                          self.data.stoichiometries.to_dense()))
 
         self.hidden_rep_model = HiddenRepModel(self.emb_size,
                                                self.emb_dimension,
@@ -106,10 +104,11 @@ class HiddenRepTrainer:
                     optimizer.step()
 
                     running_loss = running_loss * 0.9 + loss.item() * 0.1
-                    if i > 0 and i % 100 == 0:
+                    if i > 0 and i % 50 == 0:
                         print("Total Loss: " + str(running_loss))
                         losses = {key.upper(): item.item() for key, item in sublosses.items()}
                         losses["Total"] = loss.item()
+                        print(losses)
                         writer.add_scalars('run', losses, i + epoch * len(self.dataloader.dataset))
 
             hrt.save_model(checkpoint_number=epoch)
@@ -126,6 +125,6 @@ class HiddenRepTrainer:
         self.hidden_rep_model.save_keyed_vectors(self.data.id2word, kv_fn)
 
 if __name__ == '__main__':
-    hrt = HiddenRepTrainer(input_file='../common_data/small_abstracts.txt', batch_size=64, initial_lr=0.0005)
+    hrt = HiddenRepTrainer(input_file='../common_data/relevant_abstracts.pt', batch_size=16, hidden_size=32)
     hrt.train()
     # hrt.data.save("data/tiny_corpus_loaded.pt")

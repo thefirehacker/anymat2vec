@@ -10,10 +10,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import init
 from roost.roost.model import DescriptorNetwork
+from roost.core import LoadFeaturiser
+from collections import defaultdict
+from pymatgen import Element
+
+from anymat2vec.common_data.files import msch_emb_path
+
 
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
-device = "cpu"
 
 def collate_batch(dataset_list):
     """
@@ -52,11 +57,10 @@ def collate_batch(dataset_list):
     batch_self_fea_idx = []
     batch_nbr_fea_idx = []
     crystal_atom_idx = []
-    batch_cry_ids = []
 
     cry_base_idx = 0
     for i, inputs in enumerate(dataset_list):
-        atom_weights, atom_fea, self_fea_idx, nbr_fea_idx, cry_id = inputs
+        atom_weights, atom_fea, self_fea_idx, nbr_fea_idx = inputs
         # number of atoms for this crystal
         n_i = atom_fea.shape[0]
 
@@ -72,13 +76,12 @@ def collate_batch(dataset_list):
         crystal_atom_idx.append(torch.tensor([i] * n_i))
 
         # batch the targets and ids
-        batch_cry_ids.append(cry_id)
-
         # increment the id counter
         cry_base_idx += n_i
 
+
     return (
-            torch.cat(batch_atom_weights, dim=0).to(device),
+            torch.cat(batch_atom_weights, dim=0).to(device).unsqueeze(1),
             torch.cat(batch_atom_fea, dim=0).to(device),
             torch.cat(batch_self_fea_idx, dim=0).to(device),
             torch.cat(batch_nbr_fea_idx, dim=0).to(device),
@@ -107,12 +110,16 @@ class HiddenRepModel(nn.Module):
 
         """
         super(HiddenRepModel, self).__init__()
+
+        self.use_cuda = torch.cuda.is_available()
+        self.device = torch.device("cuda" if self.use_cuda else "cpu")
+        # self.device = "cpu"
+
         self.emb_size = emb_size
         self.emb_dimension = emb_dimension
         self.hidden_size = hidden_size
-        self.stoichiometries = stoichiometries
+        self.stoichiometries = stoichiometries.to(self.device)
         self.stoich_size = len(stoichiometries)
-        self.stoichiometries = stoichiometries
         self.u_embeddings = nn.Embedding(emb_size, emb_dimension)
         self.v_embeddings = nn.Embedding(emb_size, emb_dimension)
         self.num_regular_words = num_regular_words
@@ -120,25 +127,61 @@ class HiddenRepModel(nn.Module):
         init.uniform_(self.u_embeddings.weight.data, -initrange, initrange)
         init.constant_(self.v_embeddings.weight.data, 0)
 
+        elem_featurizer = LoadFeaturiser(msch_emb_path)
+        self.elem_emb_len = elem_featurizer.embedding_size
+        self.elem_features = torch.zeros(118,self.elem_emb_len).to(self.device)
+        for k,v in elem_featurizer._embedding.items():
+            self.elem_features[Element(k).number - 1] = torch.Tensor(v).to(self.device)
+
+        self.elem_features = nn.Embedding.from_pretrained(self.elem_features, freeze=True)
         self.shared_generator = DescriptorNetwork(200,
         elem_fea_len=self.hidden_size,
-        n_graph=3,
-        elem_heads=3,
-        elem_gate=[256],
-        elem_msg=[256],
-        cry_heads=3,
-        cry_gate=[256],
-        cry_msg=[256])
+        n_graph=1,
+        elem_heads=2,
+        elem_gate=[self.hidden_size],
+        elem_msg=[self.hidden_size],
+        cry_heads=2,
+        cry_gate=[self.hidden_size],
+        cry_msg=[self.hidden_size])
 
+        if self.use_cuda:
+            self.shared_generator.cuda()
 
         # target material embedding generator head
         self.tmeg = torch.nn.Linear(self.hidden_size, self.emb_dimension)
         # context material embedding generator head
         self.cmeg = torch.nn.Linear(self.hidden_size, self.emb_dimension)
 
+    def _roost_input(self, elements, weights):
+
+        atom_fea = self.elem_features(elements)
+
+        env_idx = list(range(len(elements)))
+        self_fea_idx = []
+        nbr_fea_idx = []
+        nbrs = len(elements) - 1
+        for i, _ in enumerate(elements):
+            self_fea_idx += [i] * nbrs
+            nbr_fea_idx += env_idx[:i] + env_idx[i + 1 :]
+
+        # convert all data to tensors
+        atom_weights = weights
+        # atom_fea = torch.Tensor(atom_fea).to(self.device)
+        self_fea_idx = torch.LongTensor(self_fea_idx).to(self.device)
+        nbr_fea_idx = torch.LongTensor(nbr_fea_idx).to(self.device)
+        
+        return atom_weights, atom_fea, self_fea_idx, nbr_fea_idx
+
     def _generate_embedding(self, uv, context=False):
-        stoich = [self.stoichiometries[u] for u in uv]
-        roost_input = collate_batch(stoich)
+
+        stoich = self.stoichiometries[uv] 
+        elements = [s.nonzero(as_tuple=True)[0].squeeze().to(self.device) if len(s.nonzero(as_tuple=True)[0]) != 0 else torch.ones(2,dtype=torch.long).to(self.device) for s in stoich]
+
+        weights = [s[e].to(self.device) if torch.sum(s[e]) != 0 else torch.ones(2).to(self.device) for e,s in zip(elements,stoich)]
+        # elements = 
+        input_tuples = [self._roost_input(e,w) for e,w in zip(elements, weights)]
+
+        roost_input = collate_batch(input_tuples)
         hrelu = self.shared_generator(*roost_input)
 
         if context:
